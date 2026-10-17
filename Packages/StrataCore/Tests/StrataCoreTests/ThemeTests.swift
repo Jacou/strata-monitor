@@ -2,7 +2,7 @@ import XCTest
 import SwiftUI
 @testable import StrataCore
 
-/// The token table from docs/TASKS.md, and the status → colour mapping.
+/// The theme token table (Theme.swift), and the status → colour mapping.
 final class ThemeTests: XCTestCase {
     private let dark = Theme(scheme: .dark)
     private let light = Theme(scheme: .light)
