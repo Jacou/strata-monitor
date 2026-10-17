@@ -12,11 +12,11 @@ the expert and conversation caches, every recent request, and the trends across 
 - No third-party packages. Swift 6, SwiftUI, iOS 18+ / macOS 15+.
 
 <p align="center">
-  <img src="docs/screens/t6-iphone-dark-top.png" width="230" alt="Monitor, iPhone">
+  <img src="docs/screens/iphone-monitor-dark.png" width="230" alt="Monitor, iPhone">
   &nbsp;
-  <img src="docs/screens/t9-chat-dark.png" width="230" alt="Chat, iPhone">
+  <img src="docs/screens/iphone-chat-dark.png" width="230" alt="Chat, iPhone">
   &nbsp;
-  <img src="docs/screens/t8-monitor-trends-dark.png" width="230" alt="Request trends, iPhone">
+  <img src="docs/screens/iphone-trends-dark.png" width="230" alt="Request trends, iPhone">
 </p>
 
 <p align="center">
@@ -26,7 +26,7 @@ the expert and conversation caches, every recent request, and the trends across 
 </p>
 
 <p align="center">
-  <img src="docs/screens/t6-ipad-dark-top.png" width="720" alt="Monitor on iPad">
+  <img src="docs/screens/ipad-monitor-dark.png" width="720" alt="Monitor on iPad">
 </p>
 
 ## iPhone and iPad app
@@ -46,13 +46,13 @@ tapping a point highlights its row in the list.
 side by side, content capped at 1200 pt. A narrow Split View falls back to the iPhone layout.
 
 <p align="center">
-  <img src="docs/screens/t8-config-dark.png" width="200" alt="Config">
+  <img src="docs/screens/iphone-config-dark.png" width="200" alt="Config">
   &nbsp;
-  <img src="docs/screens/t7-request-detail-dark.png" width="200" alt="Request detail">
+  <img src="docs/screens/iphone-request-detail-dark.png" width="200" alt="Request detail">
   &nbsp;
-  <img src="docs/screens/t7-session-card-dark.png" width="200" alt="Session card">
+  <img src="docs/screens/iphone-session-dark.png" width="200" alt="Session card">
   &nbsp;
-  <img src="docs/screens/t6-iphone-light-top.png" width="200" alt="Monitor, light">
+  <img src="docs/screens/iphone-monitor-light.png" width="200" alt="Monitor, light">
 </p>
 
 ## macOS menu bar app
@@ -130,7 +130,7 @@ tools/                    icon generator, mock server for states the live server
   the apps follow the system appearance. `ThemeTests` enforces WCAG AA contrast on every text pair.
 - **Lenient decoding** — every field of `/metrics` is optional, so a newer or older Strata still
   renders what it sends.
-- **Tests** — 335 across the package and the apps, driven by real server payloads in
+- **Tests** — 339 across the package and the apps, driven by real server payloads in
   `Packages/StrataCore/Tests/StrataCoreTests/Fixtures`. `swift test --package-path Packages/StrataCore`
   runs the shared ones on the Mac.
 
