@@ -1,0 +1,104 @@
+{
+  "file": "strata-iq3_xxs.json",
+  "keys": [
+    {
+      "key": "sampling.temperature",
+      "value": null,
+      "help": "Default temperature for requests that send none (0 = greedy, the default without a sampling block)",
+      "kind": "number"
+    },
+    {
+      "key": "sampling.top_p",
+      "value": null,
+      "help": "Default top_p for requests that send none",
+      "kind": "number"
+    },
+    {
+      "key": "sampling.top_k",
+      "value": null,
+      "help": "Default top_k for requests that send none (1-64)",
+      "kind": "number"
+    },
+    {
+      "key": "sampling.min_p",
+      "value": null,
+      "help": "Default min_p for requests that send none",
+      "kind": "number"
+    },
+    {
+      "key": "reasoning_budget_tokens",
+      "value": null,
+      "help": "Cap the thinking of every request at this many tokens (0 or empty: no cap)",
+      "kind": "number"
+    },
+    {
+      "key": "fit_max_tokens",
+      "value": null,
+      "help": "Shorten a max_tokens that does not fit the context instead of answering 400",
+      "kind": "bool"
+    },
+    {
+      "key": "anthropic_thinking",
+      "value": null,
+      "help": "Anthropic requests that do not ask for thinking: think as the model does (model) or not (on_request)",
+      "kind": "enum",
+      "choices": [
+        "model",
+        "on_request"
+      ]
+    },
+    {
+      "key": "effort_position",
+      "value": null,
+      "help": "Where a non-default reasoning effort goes: start (the default) or end (keeps the cache when it changes)",
+      "kind": "enum",
+      "choices": [
+        "start",
+        "end"
+      ]
+    },
+    {
+      "key": "aliases",
+      "value": null,
+      "help": "Other model names the server lists and answers to (comma-separated)",
+      "kind": "names"
+    },
+    {
+      "key": "idle_unload_s",
+      "value": null,
+      "help": "Unload the model after this many seconds without requests (0 or empty: never)",
+      "kind": "number"
+    },
+    {
+      "key": "lazy_load",
+      "value": null,
+      "help": "Start without loading the model; the first request loads it (text only)",
+      "kind": "bool"
+    },
+    {
+      "key": "engine_silence_s",
+      "value": null,
+      "help": "End a request when the engine says nothing for this long (default 300 s, 0 = wait)",
+      "kind": "number"
+    },
+    {
+      "key": "api_monitor",
+      "value": null,
+      "help": "Keep the last 100 requests' prompts and answers in memory for /api-monitor",
+      "kind": "bool"
+    },
+    {
+      "key": "open_browser",
+      "value": null,
+      "help": "Open the chat page in the browser when the model is ready",
+      "kind": "bool"
+    },
+    {
+      "key": "vram_reserve_mib",
+      "value": 700,
+      "help": "VRAM in MiB the engine leaves free for other programs (engine default 700)",
+      "kind": "number"
+    }
+  ],
+  "note": "Saved to the run config; used from the next start of the model."
+}

@@ -1,0 +1,109 @@
+name: StrataMonitor
+# Your Apple team id goes in project.local.yml (gitignored), see README → Build.
+include:
+  - path: project.local.yml
+    optional: true
+options:
+  bundleIdPrefix: com.jacou
+  deploymentTarget:
+    iOS: "18.0"
+    macOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+packages:
+  StrataCore:
+    path: Packages/StrataCore
+targets:
+  StrataMonitor:
+    type: application
+    platform: iOS
+    sources: [StrataMonitor]
+    dependencies:
+      - package: StrataCore
+    info:
+      path: StrataMonitor/Info.plist
+      properties:
+        CFBundleDisplayName: Strata
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSLocalNetworkUsageDescription: Strata Monitor connects to your Strata server on the local network to show live stats.
+        "UISupportedInterfaceOrientations~ipad": [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jacou.StrataMonitor
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  StrataMonitorTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: StrataMonitorTests
+    dependencies:
+      - target: StrataMonitor
+      - package: StrataCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/StrataMonitor.app/StrataMonitor"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+  # The package's own test sources, compiled for iOS so the shared core is proven on both
+  # platforms. `swift test --package-path Packages/StrataCore` runs the same files on macOS.
+  StrataCoreTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Packages/StrataCore/Tests/StrataCoreTests
+        excludes:
+          - "Fixtures/**"
+      - path: Packages/StrataCore/Tests/StrataCoreTests/Fixtures
+        buildPhase: resources
+    dependencies:
+      - target: StrataMonitor
+      - package: StrataCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/StrataMonitor.app/StrataMonitor"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+  # The menu bar app: the same core, a MenuBarExtra instead of a tab bar.
+  StrataMenuBar:
+    type: application
+    platform: macOS
+    sources:
+      - path: StrataMenuBar
+        excludes:
+          - "Info.plist"
+          - "*.entitlements"
+    dependencies:
+      - package: StrataCore
+    info:
+      path: StrataMenuBar/Info.plist
+      properties:
+        CFBundleDisplayName: Strata Monitor
+        CFBundleShortVersionString: "1.0"
+        LSUIElement: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jacou.StrataMenuBar
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: StrataMenuBar/StrataMenuBar.entitlements
+schemes:
+  StrataMonitor:
+    build:
+      targets:
+        StrataMonitor: all
+        StrataMonitorTests: [test]
+        StrataCoreTests: [test]
+    test:
+      targets: [StrataMonitorTests, StrataCoreTests]
+  StrataMenuBar:
+    build:
+      targets:
+        StrataMenuBar: all
