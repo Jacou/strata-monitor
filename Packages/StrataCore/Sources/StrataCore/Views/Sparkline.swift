@@ -50,8 +50,10 @@ public struct Sparkline: View {
             .chartYScale(domain: 0...top)
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
-            // The glow is tightened to radius 3 so the 1 s redraw stays cheap.
+            // The glow is tightened to radius 3 so the 1 s redraw stays cheap, and the chart is
+            // rasterised once per change rather than re-shadowed on every scrolled frame.
             .shadow(color: theme.glowColor, radius: theme.lineGlowRadius)
+            .drawingGroup()
             .frame(height: height)
             .accessibilityHidden(true)   // VoiceOver gets the numbers from the tile, not the shape
         }

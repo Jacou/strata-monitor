@@ -26,6 +26,8 @@ public struct ProgressBar: View {
                         .shadow(color: theme.glowColor, radius: theme.glowRadius)
                 }
             }
+            // Rasterised, so the glow is not recomputed on every scrolled frame.
+            .drawingGroup()
         }
         .frame(height: theme.barHeight)
         .accessibilityElement()

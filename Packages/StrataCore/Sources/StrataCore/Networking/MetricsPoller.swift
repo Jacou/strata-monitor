@@ -166,10 +166,12 @@ public final class MetricsPoller {
         resume()
     }
 
+    /// "Show all" reads the full list from the same one-off `metrics?requests=all` fetch the trends
+    /// card uses (`trendRequests`), never from the 1 s loop: that payload is ten times the size.
     public func setAllRequests(_ all: Bool) {
         guard all != allRequests else { return }
         allRequests = all
-        if isActive { Task { await pollOnce() } }
+        if all, isActive { Task { await refreshTrends() } }
     }
 
     // MARK: - one poll
@@ -178,7 +180,7 @@ public final class MetricsPoller {
     public func pollOnce() async {
         guard isActive, !isPaused else { return }
         do {
-            let fetched = try await client.metrics(allRequests: allRequests)
+            let fetched = try await client.metrics(allRequests: false)
             metrics = fetched
             consecutiveFailures = 0
             attemptsAtMax = 0

@@ -12,6 +12,10 @@ public struct MonitorView: View {
     @State private var trendsSeries: Trends.Series = .decode
     /// The request picked on the chart, highlighted in the list below it.
     @State private var highlightedRequestID: String?
+    /// While the finger is on the screen the 1 s poll must not re-lay the page out under it:
+    /// the view keeps drawing the payload it had when the scroll began.
+    @State private var isScrolling = false
+    @State private var frozenMetrics: Metrics?
 
     public init() {}
 
@@ -20,9 +24,10 @@ public struct MonitorView: View {
             ScrollViewReader { proxy in
                 GeometryReader { viewport in
                     let model = MonitorViewModel(
-                        metrics: poller.metrics ?? Metrics(),
+                        metrics: displayedMetrics,
                         now: .now,
                         allRequests: poller.allRequests,
+                        fullRequests: poller.trendRequests,
                         modelLoaded: poller.health?.loaded
                     )
                     // Measured on the viewport, not on the capped content, so the column
@@ -96,6 +101,7 @@ public struct MonitorView: View {
                                 emptyText: model.noRequestsText,
                                 showAllLabel: model.showAllLabel,
                                 showingAll: poller.allRequests,
+                                showFewerLabel: model.showFewerLabel,
                                 isTable: layout.isWide,
                                 highlightedID: highlightedRequestID,
                                 presented: $presentedDetail
@@ -141,6 +147,7 @@ public struct MonitorView: View {
                                     metrics: poller.metrics ?? Metrics(),
                                     now: .now,
                                     allRequests: poller.allRequests,
+                                    fullRequests: poller.trendRequests,
                                     modelLoaded: poller.health?.loaded
                                 )
                                 presentedDetail = current.requests.first?.detail
@@ -157,6 +164,7 @@ public struct MonitorView: View {
                                     metrics: poller.metrics ?? Metrics(),
                                     now: .now,
                                     allRequests: poller.allRequests,
+                                    fullRequests: poller.trendRequests,
                                     modelLoaded: poller.health?.loaded
                                 )
                                 select(request: newest.id, in: current, proxy: proxy)
@@ -171,6 +179,12 @@ public struct MonitorView: View {
             // The title is drawn by ScreenTitle, so the theme controls its type.
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { await poller.pollOnce() }
+            .onScrollPhaseChange { _, phase in
+                let scrolling = phase != .idle
+                if scrolling, !isScrolling { frozenMetrics = poller.metrics }
+                isScrolling = scrolling
+                if !scrolling { frozenMetrics = nil }
+            }
         }
     }
 
@@ -189,13 +203,21 @@ public struct MonitorView: View {
         updatedCaption(status: poller.status, lastUpdated: poller.lastUpdated)
     }
 
-    /// A tap on the chart highlights that request; if the list is showing only the last twelve,
-    /// switch it to "all" so the row is actually on screen.
+    private var displayedMetrics: Metrics {
+        (isScrolling ? frozenMetrics : nil) ?? poller.metrics ?? Metrics()
+    }
+
+    /// A tap on the chart highlights that request and scrolls to its row. When the row is not
+    /// among the ones on screen, its detail sheet opens instead — the list is not switched to
+    /// "all", which would make the whole screen heavier for one tap.
     private func select(request id: String, in model: MonitorViewModel, proxy: ScrollViewProxy) {
         highlightedRequestID = id
-        if model.requests.first(where: { $0.id == id }) == nil, !poller.allRequests {
-            poller.setAllRequests(true)
+        if model.requests.contains(where: { $0.id == id }) {
+            proxy.scrollTo(id)
+        } else if let request = poller.trendRequests.first(where: { $0.id == id }) {
+            var one = Metrics()
+            one.requests = [request]
+            presentedDetail = MonitorViewModel(metrics: one).requests.first?.detail
         }
-        proxy.scrollTo(id)
     }
 }

@@ -7,6 +7,7 @@ public struct RequestsCard: View {
     public let emptyText: String?
     public let showAllLabel: String?
     public let showingAll: Bool
+    public let showFewerLabel: String
     /// Regular width gets the web page's table; compact width keeps the two-line rows.
     public let isTable: Bool
     /// The request picked on the trends chart, if there is one.
@@ -22,6 +23,7 @@ public struct RequestsCard: View {
         emptyText: String?,
         showAllLabel: String?,
         showingAll: Bool,
+        showFewerLabel: String = "Show fewer",
         isTable: Bool = false,
         highlightedID: String? = nil,
         presented: Binding<MonitorViewModel.RequestDetail?>,
@@ -31,6 +33,7 @@ public struct RequestsCard: View {
         self.emptyText = emptyText
         self.showAllLabel = showAllLabel
         self.showingAll = showingAll
+        self.showFewerLabel = showFewerLabel
         self.isTable = isTable
         self.highlightedID = highlightedID
         self._presented = presented
@@ -45,7 +48,7 @@ public struct RequestsCard: View {
                     .foregroundStyle(theme.textPrimary)
                 Spacer()
                 if showAllLabel != nil {
-                    Button(showingAll ? "Show fewer" : (showAllLabel ?? "Show all")) {
+                    Button(showingAll ? showFewerLabel : (showAllLabel ?? "Show all")) {
                         onToggleShowAll()
                     }
                     .font(.callout)
@@ -61,11 +64,14 @@ public struct RequestsCard: View {
             } else if isTable {
                 RequestsTable(rows: rows, highlightedID: highlightedID) { presented = $0 }
             } else {
-                ForEach(rows) { row in
-                    RequestRowButton(row: row, isHighlighted: row.id == highlightedID) { presented = $0 }
-                        .id(row.id)   // so the chart's tap can scroll to this row
-                    if row.id != rows.last?.id {
-                        theme.separator.frame(height: theme.hairline)
+                // Lazy: "Show all" can be a hundred rows, and only the visible ones should cost layout.
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(rows) { row in
+                        RequestRowButton(row: row, isHighlighted: row.id == highlightedID) { presented = $0 }
+                            .id(row.id)   // so the chart's tap can scroll to this row
+                        if row.id != rows.last?.id {
+                            theme.separator.frame(height: theme.hairline)
+                        }
                     }
                 }
             }

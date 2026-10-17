@@ -164,12 +164,18 @@ public struct MonitorViewModel: Sendable, Equatable {
     public var session: Session?
     /// "Show all (224)", or nil when everything kept is already on screen.
     public var showAllLabel: String?
+    /// The button while showing all: "Show fewer", or "Show fewer · newest 100 of 500" when capped.
+    public var showFewerLabel: String = "Show fewer"
+
+    /// At most this many rows when "Show all" is on: the newest ones. A list is not a log.
+    public static let maxShownRequests = 100
 
     public init(
         metrics: Metrics,
         now: Date = .now,
         locale: Locale = .autoupdatingCurrent,
         allRequests: Bool = false,
+        fullRequests: [Request]? = nil,
         modelLoaded: Bool? = nil
     ) {
         let live = metrics.live
@@ -179,7 +185,12 @@ public struct MonitorViewModel: Sendable, Equatable {
         let history = metrics.history
         let all = metrics.requests ?? []
         let last = all.first
-        let shown = allRequests ? all : Array(all.prefix(12))
+        // "Show all" draws from the separately fetched full list when there is one (newest first,
+        // whatever order the server used), the 1 s payload otherwise.
+        let pool = allRequests
+            ? ((fullRequests?.isEmpty == false ? fullRequests! : all).sorted { ($0.time ?? 0) > ($1.time ?? 0) })
+            : all
+        let shown = allRequests ? Array(pool.prefix(Self.maxShownRequests)) : Array(all.prefix(12))
 
         self.live = Self.liveCard(live: live, last: last, modelLoaded: modelLoaded, locale: locale)
         self.metrics = Self.metricTiles(
@@ -195,6 +206,9 @@ public struct MonitorViewModel: Sendable, Equatable {
         self.session = Self.session(metrics.totals, now: now, locale: locale)
         let kept = metrics.requestsKept ?? all.count
         self.showAllLabel = kept > 12 ? "Show all (\(fmt(Double(kept), 0, locale: locale)))" : nil
+        if allRequests, kept > shown.count {
+            self.showFewerLabel = "Show fewer · newest \(shown.count) of \(fmt(Double(kept), 0, locale: locale))"
+        }
     }
 
     // MARK: - live card
