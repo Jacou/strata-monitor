@@ -126,7 +126,11 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     /// to the screen. nil while the item has no window yet.
     private var itemScreenRect: NSRect? {
         guard let button = statusItem?.button, let window = button.window else { return nil }
-        return window.convertToScreen(button.convert(button.bounds, to: nil))
+        // The drawn label, not the button: while a card is open the button can be pinned wider
+        // than what it shows, and that extra width must not catch the pointer.
+        let local = labelHosting.map { $0.frame.intersection(button.bounds) } ?? button.bounds
+        let rect = local.isEmpty ? button.bounds : local
+        return window.convertToScreen(button.convert(rect, to: nil))
     }
 
     /// Mouse-move monitors (the status bar window is ours, so the local one sees it; the global one
@@ -154,8 +158,17 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         var inside = item.insetBy(dx: -slack, dy: -slack).contains(mouse)
         // The card sits a step away from the icon: while it is open, the pointer resting on it counts
         // as still being on the item.
-        if !inside, let card = hoverPopover.contentViewController?.view.window {
-            inside = card.frame.insetBy(dx: -slack, dy: -slack).contains(mouse)
+        // Only a card that is actually on screen, and only the part of it below the menu bar: the
+        // popover window's frame reaches up into the bar and is far wider than the icon, so without
+        // the clip the neighbouring menu bar icons would count as Strata's.
+        if !inside, hoverPopover.isShown,
+           let card = hoverPopover.contentViewController?.view.window, card.isVisible {
+            var region = card.frame.insetBy(dx: -slack, dy: -slack)
+            let barBottom = item.minY
+            if region.maxY > barBottom { region.size.height = max(0, barBottom - region.minY) }
+            // …plus the narrow corridor straight down from the icon, so the trip to the card holds.
+            let corridor = NSRect(x: item.minX, y: barBottom - slack * 4, width: item.width, height: slack * 4)
+            inside = region.contains(mouse) || corridor.contains(mouse)
         }
         if !loggedFirstSample {
             loggedFirstSample = true
