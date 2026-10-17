@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import StrataCore
@@ -16,6 +17,8 @@ final class MenuBarModel {
     private(set) var poller: MetricsPoller?
     private(set) var isFastPolling = false
 
+    private var observers: [any NSObjectProtocol] = []
+
     init() {
         settings = AppSettings(keychain: Keychain(service: Self.keychainService))
         #if DEBUG
@@ -23,6 +26,42 @@ final class MenuBarModel {
         settings.adoptAPIKeyFromEnvironment()
         #endif
         reconnect()
+        watchSleepAndLock()
+    }
+
+    /// True once the backoff gave up on the server; a click on the icon starts it again.
+    var isPaused: Bool { poller?.isPaused ?? false }
+
+    /// The click on the icon: forget the failures and poll now. Nothing happens unless paused.
+    func resumeIfPaused() {
+        guard isPaused else { return }
+        poller?.resume()
+    }
+
+    /// No polling while the Mac sleeps or the screen is locked; one fresh try on wake / unlock.
+    private func watchSleepAndLock() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        let distributed = DistributedNotificationCenter.default()
+        let pause: [(NotificationCenter, Notification.Name)] = [
+            (workspace, NSWorkspace.willSleepNotification),
+            (workspace, NSWorkspace.screensDidSleepNotification),
+            (distributed, Notification.Name("com.apple.screenIsLocked")),
+        ]
+        let resume: [(NotificationCenter, Notification.Name)] = [
+            (workspace, NSWorkspace.didWakeNotification),
+            (workspace, NSWorkspace.screensDidWakeNotification),
+            (distributed, Notification.Name("com.apple.screenIsUnlocked")),
+        ]
+        for (center, name) in pause {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.poller?.setActive(false) }
+            })
+        }
+        for (center, name) in resume {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.poller?.setActive(true) }
+            })
+        }
     }
 
     var isConfigured: Bool { poller != nil }
@@ -40,7 +79,7 @@ final class MenuBarModel {
 
     /// The hover card's own, smaller derivation.
     var hoverCard: HoverCard {
-        HoverCard(metrics: metrics, status: status, model: modelName, lastUpdated: lastUpdated)
+        HoverCard(metrics: metrics, status: status, model: modelName, lastUpdated: lastUpdated, paused: isPaused)
     }
 
     /// 1 s while the hover card or the full popover is open, the chosen cadence otherwise. No scene
@@ -65,7 +104,8 @@ final class MenuBarModel {
         }
         let next = MetricsPoller(
             client: client,
-            interval: isFastPolling ? Self.openInterval : closedInterval
+            interval: isFastPolling ? Self.openInterval : closedInterval,
+            backoff: .menuBar
         )
         next.start()
         poller = next

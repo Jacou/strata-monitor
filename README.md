@@ -69,6 +69,10 @@ side by side, content capped at 1200 pt. A narrow Split View falls back to the i
   requests, links to the Strata web page, Settings and Quit. **Right-click** — Settings and Quit.
 - **Settings window** — address, key (its own Keychain entry), Test connection, Launch at login,
   and the idle refresh rate (5 / 15 / 30 s; 1 s while a card is open).
+- **Polling** — one `GET /metrics` (~13 KB) per tick, `/health` every tenth. When the server stops
+  answering the delay doubles (5 → 10 → 20 → 40 → 60 s); after three misses at 60 s it stops
+  altogether and the card says "Paused · click to retry". A click, a wake from sleep, an unlock
+  or new settings start it again. Nothing is fetched while the Mac sleeps or the screen is locked.
 
 ## Build
 

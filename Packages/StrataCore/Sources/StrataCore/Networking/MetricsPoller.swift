@@ -31,6 +31,23 @@ public enum MonitorStatus: Equatable, Sendable {
     }
 }
 
+/// How a poller slows down while the server does not answer: the delay doubles from the normal
+/// interval up to `maxInterval`; after `pauseAfterAttemptsAtMax` failed tries at that ceiling it
+/// stops altogether until `resume()` (a click on the menu bar icon, a wake from sleep, new settings).
+/// nil `pauseAfterAttemptsAtMax` backs off but never stops.
+public struct BackoffPolicy: Sendable, Equatable {
+    public var maxInterval: TimeInterval
+    public var pauseAfterAttemptsAtMax: Int?
+
+    public init(maxInterval: TimeInterval, pauseAfterAttemptsAtMax: Int? = nil) {
+        self.maxInterval = maxInterval
+        self.pauseAfterAttemptsAtMax = pauseAfterAttemptsAtMax
+    }
+
+    /// The menu bar app's: 5 → 10 → 20 → 40 → 60 s, then three misses at 60 s and it stops.
+    public static let menuBar = BackoffPolicy(maxInterval: 60, pauseAfterAttemptsAtMax: 3)
+}
+
 /// Polls /metrics once a second while the app is in the foreground, like the web page does.
 @Observable @MainActor
 public final class MetricsPoller {
@@ -50,8 +67,15 @@ public final class MetricsPoller {
     public private(set) var trendRequests: [Request] = []
     public private(set) var trendsUpdated: Date?
 
-    /// False while `scenePhase != .active`: the loop idles instead of hitting the server.
+    /// False while `scenePhase != .active` (iOS) or the Mac is asleep / locked: the loop is stopped.
     public private(set) var isActive = true
+
+    /// Set to slow down while the server is unreachable; nil polls at `interval` no matter what.
+    public var backoff: BackoffPolicy?
+    /// True once the backoff gave up: nothing is fetched until `resume()`.
+    public private(set) var isPaused = false
+    /// Failed tries made at the backoff ceiling since the last success.
+    public private(set) var attemptsAtMax = 0
 
     private var client: StrataClient
     public private(set) var interval: TimeInterval
@@ -60,20 +84,29 @@ public final class MetricsPoller {
     private var polls = 0
     private var task: Task<Void, Never>?
 
-    public init(client: StrataClient, interval: TimeInterval = 1) {
+    public init(client: StrataClient, interval: TimeInterval = 1, backoff: BackoffPolicy? = nil) {
         self.client = client
         self.interval = interval
+        self.backoff = backoff
+    }
+
+    /// The wait before the next poll: `interval` normally, longer while the server keeps failing.
+    public var currentDelay: TimeInterval {
+        guard let backoff, consecutiveFailures > 0 else { return interval }
+        let doubled = interval * pow(2, Double(consecutiveFailures - 1))
+        return min(backoff.maxInterval, max(interval, doubled))
     }
 
     // MARK: - lifecycle
 
     public func start() {
-        guard task == nil else { return }
+        guard task == nil, !isPaused else { return }
         task = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { break }
                 await self.pollOnce()
-                try? await Task.sleep(nanoseconds: UInt64(self.interval * 1_000_000_000))
+                guard !Task.isCancelled else { break }
+                try? await Task.sleep(nanoseconds: UInt64(self.currentDelay * 1_000_000_000))
             }
         }
     }
@@ -83,11 +116,16 @@ public final class MetricsPoller {
         task = nil
     }
 
-    /// Called from the scene: polling pauses in the background, resumes in the foreground.
+    /// Called from the scene (iOS) or on sleep / wake and lock / unlock (Mac): the loop stops
+    /// while inactive and starts again — a paused poller gets one fresh try on wake.
     public func setActive(_ active: Bool) {
         guard active != isActive else { return }
         isActive = active
-        if active { start() }
+        if active {
+            if isPaused { resume() } else { start() }
+        } else {
+            stop()
+        }
     }
 
     /// Change the polling cadence. A menu bar app polls every second while its popover is open and
@@ -95,6 +133,16 @@ public final class MetricsPoller {
     public func setInterval(_ interval: TimeInterval) {
         guard interval > 0, interval != self.interval else { return }
         self.interval = interval
+    }
+
+    /// Forget the failures and poll again now. A no-op while not active (the Mac is asleep).
+    public func resume() {
+        isPaused = false
+        consecutiveFailures = 0
+        attemptsAtMax = 0
+        lastError = nil
+        guard isActive else { return }
+        if task == nil { start() } else { Task { await pollOnce() } }
     }
 
     /// One `metrics?requests=all` fetch for the trends card. A failure keeps the series already on
@@ -112,12 +160,10 @@ public final class MetricsPoller {
     /// Settings changed: point at the new server / key and poll again at once.
     public func update(client: StrataClient) {
         self.client = client
-        consecutiveFailures = 0
-        lastError = nil
         status = .unknown
         health = nil
         polls = 0
-        if isActive { Task { await pollOnce() } }
+        resume()
     }
 
     public func setAllRequests(_ all: Bool) {
@@ -130,11 +176,12 @@ public final class MetricsPoller {
 
     /// One poll. Public so the pull-to-refresh / "Test connection" path can reuse it.
     public func pollOnce() async {
-        guard isActive else { return }
+        guard isActive, !isPaused else { return }
         do {
             let fetched = try await client.metrics(allRequests: allRequests)
             metrics = fetched
             consecutiveFailures = 0
+            attemptsAtMax = 0
             lastError = nil
             lastUpdated = .now
             polls += 1
@@ -165,7 +212,24 @@ public final class MetricsPoller {
         case .unreachable, .http, .decoding:
             consecutiveFailures += 1
             if consecutiveFailures >= failureLimit { status = .unreachable }
+            if let backoff, currentDelay >= backoff.maxInterval {
+                attemptsAtMax += 1
+                if let limit = backoff.pauseAfterAttemptsAtMax, attemptsAtMax >= limit {
+                    pause()
+                }
+            }
         }
+    }
+
+    /// Tests drive the failure ladder without a clock.
+    func recordFailureForTesting() {
+        record(.unreachable)
+    }
+
+    /// The backoff gave up: stop the loop, keep the last data and the "not reachable" status.
+    private func pause() {
+        isPaused = true
+        stop()
     }
 
     /// The pill text the web page would show for this payload. `loaded` comes from /health:

@@ -271,6 +271,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     // MARK: - clicks
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        // A paused poller (the backoff gave up) starts again on any click.
+        model.resumeIfPaused()
         if NSApp.currentEvent?.type == .rightMouseUp {
             showMenu(in: sender)
             return

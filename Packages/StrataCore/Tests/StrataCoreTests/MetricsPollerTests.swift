@@ -312,4 +312,84 @@ final class MetricsPollerTests: XCTestCase {
         XCTAssertEqual(poller.trendRequests, before, "a failed trends fetch must not blank the chart")
         XCTAssertEqual(poller.trendsUpdated, updatedBefore)
     }
+
+    // MARK: - backoff
+
+    private func failing() -> StubTransport {
+        StubTransport { _ in throw URLError(.cannotConnectToHost) }
+    }
+
+    func testNoBackoffWithoutAPolicy() async throws {
+        let poller = makePoller(failing(), interval: 0.05)
+        poller.start()
+        let failed = await waitUntil { poller.consecutiveFailures >= 4 }
+        XCTAssertTrue(failed)
+        XCTAssertEqual(poller.currentDelay, 0.05, accuracy: 0.0001)
+        XCTAssertFalse(poller.isPaused)
+        poller.stop()
+    }
+
+    func testBackoffDoublesUpToTheCeiling() {
+        let poller = MetricsPoller(
+            client: StrataClient(baseURL: base, apiKey: "k", transport: failing()),
+            interval: 5,
+            backoff: BackoffPolicy(maxInterval: 60, pauseAfterAttemptsAtMax: 3)
+        )
+        XCTAssertEqual(poller.currentDelay, 5)
+        var delays: [TimeInterval] = []
+        for _ in 1...7 {
+            poller.recordFailureForTesting()
+            delays.append(poller.currentDelay)
+        }
+        XCTAssertEqual(delays, [5, 10, 20, 40, 60, 60, 60])
+        XCTAssertEqual(poller.attemptsAtMax, 3)
+        XCTAssertTrue(poller.isPaused, "three misses at the ceiling stop the loop")
+        XCTAssertEqual(poller.status, .unreachable)
+    }
+
+    func testResumeForgetsTheFailuresAndPollsAgain() async throws {
+        let gate = CallCounter()      // 0 = the server is down; the test opens it after the pause
+        let counter = CallCounter()
+        let transport = StubTransport { request in
+            _ = counter.next()
+            if gate.count == 0 { throw URLError(.cannotConnectToHost) }
+            let body = Data(#"{"live":{"state":"idle"},"time":1}"#.utf8)
+            return (body, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        let poller = MetricsPoller(
+            client: StrataClient(baseURL: base, apiKey: "k", transport: transport),
+            interval: 0.01,
+            backoff: BackoffPolicy(maxInterval: 0.02, pauseAfterAttemptsAtMax: 2)
+        )
+        poller.start()
+        let paused = await waitUntil { poller.isPaused }
+        XCTAssertTrue(paused)
+        let countWhenPaused = counter.count
+        await settle(0.1)
+        XCTAssertEqual(counter.count, countWhenPaused, "a paused poller makes no requests")
+
+        _ = gate.next()               // the server is back
+        poller.resume()
+        XCTAssertFalse(poller.isPaused)
+        XCTAssertEqual(poller.consecutiveFailures, 0)
+        let recovered = await waitUntil { poller.status == .idle }
+        XCTAssertTrue(recovered)
+        poller.stop()
+    }
+
+    func testInactiveStopsTheLoopAndWakeResumesAPausedOne() async throws {
+        let poller = MetricsPoller(
+            client: StrataClient(baseURL: base, apiKey: "k", transport: failing()),
+            interval: 0.01,
+            backoff: BackoffPolicy(maxInterval: 0.02, pauseAfterAttemptsAtMax: 1)
+        )
+        poller.start()
+        let paused = await waitUntil { poller.isPaused }
+        XCTAssertTrue(paused)
+        poller.setActive(false)
+        XCTAssertFalse(poller.isActive)
+        poller.setActive(true)
+        XCTAssertFalse(poller.isPaused, "a wake gives a paused poller one fresh try")
+        poller.stop()
+    }
 }

@@ -28,6 +28,7 @@ public struct HoverCard: Sendable, Equatable {
         status: MonitorStatus,
         model: String?,
         lastUpdated: Date?,
+        paused: Bool = false,
         now: Date = .now,
         locale: Locale = .autoupdatingCurrent
     ) {
@@ -40,6 +41,8 @@ public struct HoverCard: Sendable, Equatable {
         if case .generating = status {
             pill = "Generating · \(Self.capitalized(live?.phase))"
         }
+        // The backoff gave up: say so, and how to get it going again.
+        if paused { pill = "Paused · click to retry" }
 
         // Decode: the engine's live rate while it is generating, otherwise the last request's.
         let decodeValue = generating ? live?.tokS : last?.decodeTokS

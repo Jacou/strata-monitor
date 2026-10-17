@@ -54,7 +54,7 @@ struct MenuBarPopover: View {
         HStack(alignment: .center, spacing: 8) {
             StatusPill(model.status)
             Spacer(minLength: 0)
-            Text(updatedCaption(status: model.status, lastUpdated: model.lastUpdated))
+            Text(model.isPaused ? "paused · click the icon to retry" : updatedCaption(status: model.status, lastUpdated: model.lastUpdated))
                 .font(theme.subFont)
                 .foregroundStyle(theme.textTertiary)
         }
