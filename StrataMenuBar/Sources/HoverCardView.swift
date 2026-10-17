@@ -15,6 +15,7 @@ struct HoverCardView: View {
 
         VStack(alignment: .leading, spacing: 10) {
             StatusPill(card.status, text: card.pillText)
+                .lineLimit(1)
 
             HStack(alignment: .top, spacing: 16) {
                 speed("Decode", card.decode, color: theme.accentText)

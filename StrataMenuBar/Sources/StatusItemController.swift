@@ -34,6 +34,13 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     static let hoverOpenDelay: TimeInterval = 0.12
     /// Long enough to cross the gap between the icon and the card.
     static let hoverCloseDelay: TimeInterval = 0.25
+
+    #if DEBUG
+    /// `--show-popover` / `--show-hover` open a card two seconds after launch and keep it open, so a
+    /// screenshot can be taken without a pointer on the item.
+    private let debugShowsPopover = ProcessInfo.processInfo.arguments.contains("--show-popover")
+    private let debugHoldsHover = ProcessInfo.processInfo.arguments.contains("--show-hover")
+    #endif
     /// Backstop for the mouse-move monitors: the pointer is checked this often.
     static let pointerCheckInterval: TimeInterval = 0.2
     /// The menu bar item is small; a point or two of slack keeps the edge from counting as a leave.
@@ -104,6 +111,15 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         observeModel()
         watchPointer()
         hoverLogLine("install: bounds=\(String(describing: button.bounds)) length=\(item.length)")
+
+        #if DEBUG
+        if debugShowsPopover || debugHoldsHover {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                guard let self else { return }
+                if self.debugShowsPopover { self.toggleFullPopover() } else { self.openHoverCard() }
+            }
+        }
+        #endif
     }
 
     /// Where the pointer is, in screen coordinates: the item's rect in its own window, pushed out
@@ -275,8 +291,14 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         if fullPopover.isShown {
             fullPopover.close()
         } else {
-            let hosting = NSHostingView(rootView: MenuBarPopover(model: model).strataTheme())
+            // The popover follows the SwiftUI content as it reflows (a longer pill, more request
+            // rows): `preferredContentSize` is what NSPopover animates to.
             let controller = NSViewController()
+            let hosting = NSHostingView(rootView: MenuBarPopover(model: model).strataTheme()
+                .onGeometryChange(for: CGSize.self, of: { $0.size }) { [weak controller] size in
+                    guard size.width > 0, size.height > 0 else { return }
+                    controller?.preferredContentSize = size
+                })
             controller.view = hosting
             controller.preferredContentSize = hosting.fittingSize
             fullPopover.contentViewController = controller
@@ -358,7 +380,15 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             return
         }
 
-        let hosting = PassthroughHostingView(rootView: AnyView(HoverCardView(model: model).strataTheme()))
+        // The card's text changes while it is open (Idle → Reading prompt → Generating · thinking);
+        // the SwiftUI content reports its new size and the popover follows at once, instead of
+        // keeping the size it opened with.
+        let controller = NSViewController()
+        let hosting = PassthroughHostingView(rootView: AnyView(HoverCardView(model: model).strataTheme()
+            .onGeometryChange(for: CGSize.self, of: { $0.size }) { [weak controller] size in
+                guard size.width > 0, size.height > 0 else { return }
+                controller?.preferredContentSize = size
+            }))
         let wrapper = TrackingHostView(frame: NSRect(origin: .zero, size: hosting.fittingSize))
         hosting.frame = wrapper.bounds
         hosting.autoresizingMask = [.width, .height]
@@ -366,7 +396,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         wrapper.onEnter = { [weak self] in self?.pendingHide?.cancel() }
         wrapper.onExit = { [weak self] in self?.scheduleHoverClose() }
 
-        let controller = NSViewController()
         controller.view = wrapper
         controller.preferredContentSize = wrapper.frame.size
         hoverPopover.contentViewController = controller
@@ -390,6 +419,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     }
 
     private func scheduleHoverClose() {
+        #if DEBUG
+        if debugHoldsHover { return }
+        #endif
         pendingHide?.cancel()
         pendingHide = Task { @MainActor [weak self] in
             guard let self else { return }
