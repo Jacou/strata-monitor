@@ -136,7 +136,7 @@ tools/                    icon generator, mock server for states the live server
   the apps follow the system appearance. `ThemeTests` enforces WCAG AA contrast on every text pair.
 - **Lenient decoding** — every field of `/metrics` is optional, so a newer or older Strata still
   renders what it sends.
-- **Tests** — 348 across the package and the apps, driven by real server payloads in
+- **Tests** — 349 across the package and the apps, driven by real server payloads in
   `Packages/StrataCore/Tests/StrataCoreTests/Fixtures`. `swift test --package-path Packages/StrataCore`
   runs the shared ones on the Mac.
 
