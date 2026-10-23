@@ -313,6 +313,23 @@ final class MetricsPollerTests: XCTestCase {
         XCTAssertEqual(poller.trendsUpdated, updatedBefore)
     }
 
+    func testSwitchServerDropsTheOldServersData() async throws {
+        let data = try Fixtures.data("metrics_idle", testClass: type(of: self))
+        let poller = makePoller(StubTransport.respondingData(data))
+        await poller.pollOnce()
+        await poller.refreshTrends()
+        XCTAssertNotNil(poller.metrics)
+        XCTAssertFalse(poller.trendRequests.isEmpty)
+
+        poller.setActive(false)
+        poller.switchServer(to: StrataClient(baseURL: URL(string: "http://10.0.0.5:8081")!,
+                                             transport: StubTransport.failing(URLError(.timedOut))))
+        XCTAssertNil(poller.metrics)
+        XCTAssertNil(poller.lastUpdated)
+        XCTAssertTrue(poller.trendRequests.isEmpty)
+        XCTAssertEqual(poller.status, .unknown)
+    }
+
     // MARK: - backoff
 
     private func failing() -> StubTransport {

@@ -64,7 +64,7 @@ public struct ChatView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ScreenTitle("Chat")
+            ScreenTitleRow("Chat")
 
             HStack(spacing: 10) {
                 statusLine

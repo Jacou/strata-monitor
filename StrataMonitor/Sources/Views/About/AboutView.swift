@@ -21,7 +21,7 @@ public struct AboutView: View {
                 List {
                     // The title lives inside the list so the themed background runs through it
                     // instead of leaving a band of list background between the two.
-                    ScreenTitle("About")
+                    ScreenTitleRow("About")
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
 

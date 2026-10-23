@@ -17,6 +17,16 @@ public enum MenuBarLabel {
         }
     }
 
+    /// The longest tag in front of the label: room for "Studio" or "Mac", not a sentence.
+    public static let tagLength = 6
+
+    /// The server's name cut to fit in front of the label when two servers share the menu bar:
+    /// "Mac Studio" → "Mac St". No ellipsis — the cards spell the full name out.
+    public static func tag(for name: String) -> String {
+        String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(tagLength))
+            .trimmingCharacters(in: .whitespaces)
+    }
+
     /// The SF Symbol that goes with the text. The menu bar gets its own set: `text.magnifyingglass`
     /// and `exclamationmark.triangle` read better at menu bar size than the pill's symbols.
     public static func symbol(for status: MonitorStatus) -> String {

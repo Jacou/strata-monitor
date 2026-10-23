@@ -6,7 +6,7 @@ import SwiftUI
 struct HoverCardView: View {
     static let cardWidth: CGFloat = 260
 
-    let model: MenuBarModel
+    let model: ServerMonitorModel
 
     @Environment(\.theme) private var theme
 
@@ -22,7 +22,7 @@ struct HoverCardView: View {
                 speed("Prefill", card.prefill, color: theme.textPrimary)
             }
 
-            Text(card.footer)
+            Text(model.cardName.map { "\($0) · \(card.footer)" } ?? card.footer)
                 .font(theme.subFont)
                 .foregroundStyle(theme.textTertiary)
                 .lineLimit(1)

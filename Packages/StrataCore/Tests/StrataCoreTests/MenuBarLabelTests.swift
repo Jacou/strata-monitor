@@ -66,4 +66,13 @@ final class MenuBarLabelTests: XCTestCase {
             theme.metricValueSize(paired: false, compact: false)
         )
     }
+
+    func testTagIsTheNameCutShort() {
+        XCTAssertEqual(MenuBarLabel.tag(for: "Mac"), "Mac")
+        XCTAssertEqual(MenuBarLabel.tag(for: "Mac Studio"), "Mac St")
+        XCTAssertEqual(MenuBarLabel.tag(for: "  Studio  "), "Studio")
+        XCTAssertEqual(MenuBarLabel.tag(for: "Big M4 Max"), "Big M4")
+        XCTAssertEqual(MenuBarLabel.tag(for: "Mac   Pro"), "Mac", "no trailing space after the cut")
+        XCTAssertEqual(MenuBarLabel.tag(for: ""), "")
+    }
 }

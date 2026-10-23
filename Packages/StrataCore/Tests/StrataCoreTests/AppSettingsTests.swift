@@ -239,4 +239,135 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.baseURLString, AppSettings.defaultBaseURLString)
     }
     #endif
+
+    // MARK: - two servers
+
+    func testSingleServerValuesLoadAsThePrimarySlot() throws {
+        let defaults = freshDefaults()
+        let keychain = freshKeychain()
+        defaults.set("http://192.168.1.82:8081", forKey: "settings.baseURL")
+        try keychain.set("old-key", account: "apiKey")
+
+        let settings = AppSettings(defaults: defaults, keychain: keychain)
+        XCTAssertEqual(settings.selectedSlot, .primary)
+        XCTAssertEqual(settings.baseURLString(for: .primary), "http://192.168.1.82:8081")
+        XCTAssertEqual(settings.apiKey(for: .primary), "old-key")
+        XCTAssertEqual(settings.baseURLString(for: .secondary), "")
+        XCTAssertEqual(settings.configuredSlots, [.primary])
+        XCTAssertFalse(settings.hasMultipleServers)
+    }
+
+    func testSecondaryServerPersistsUnderItsOwnKeys() {
+        let defaults = freshDefaults()
+        let keychain = freshKeychain()
+
+        let first = AppSettings(defaults: defaults, keychain: keychain)
+        first.setBaseURLString("http://192.168.1.83:8081", for: .secondary)
+        first.setName("  Studio  ", for: .secondary)
+        first.setAPIKey("  second  ", for: .secondary)
+
+        XCTAssertEqual(defaults.string(forKey: "settings.secondary.baseURL"), "http://192.168.1.83:8081")
+        XCTAssertEqual(defaults.string(forKey: "settings.secondary.name"), "Studio")
+        XCTAssertEqual(keychain.get("apiKey.secondary"), "second")
+        XCTAssertNil(persisted(defaults).values.first { ($0 as? String) == "second" }, "the key stays out of UserDefaults")
+
+        let second = AppSettings(defaults: defaults, keychain: keychain)
+        XCTAssertEqual(second.baseURLString(for: .secondary), "http://192.168.1.83:8081")
+        XCTAssertEqual(second.name(for: .secondary), "Studio")
+        XCTAssertEqual(second.apiKey(for: .secondary), "second")
+        XCTAssertEqual(second.configuredSlots, [.primary, .secondary])
+        XCTAssertTrue(second.hasMultipleServers)
+    }
+
+    func testTheTwoKeysDoNotCollide() {
+        let keychain = freshKeychain()
+        let settings = AppSettings(defaults: freshDefaults(), keychain: keychain)
+        settings.setAPIKey("one", for: .primary)
+        settings.setAPIKey("two", for: .secondary)
+        XCTAssertEqual(keychain.get("apiKey"), "one")
+        XCTAssertEqual(keychain.get("apiKey.secondary"), "two")
+
+        settings.setAPIKey("", for: .secondary)
+        XCTAssertNil(keychain.get("apiKey.secondary"))
+        XCTAssertEqual(settings.apiKey(for: .primary), "one")
+    }
+
+    func testSelectionPersistsAndDrivesTheSingleServerAPI() throws {
+        let defaults = freshDefaults()
+        let keychain = freshKeychain()
+
+        let first = AppSettings(defaults: defaults, keychain: keychain)
+        first.setAPIKey("one", for: .primary)
+        first.setBaseURLString("http://192.168.1.83:8081", for: .secondary)
+        first.setAPIKey("two", for: .secondary)
+        first.selectedSlot = .secondary
+        XCTAssertEqual(first.baseURLString, "http://192.168.1.83:8081")
+        XCTAssertEqual(first.apiKey, "two")
+        XCTAssertEqual(first.makeClient()?.apiKey, "two")
+
+        first.apiKey = "two-b"
+        XCTAssertEqual(first.apiKey(for: .secondary), "two-b")
+        XCTAssertEqual(first.apiKey(for: .primary), "one")
+
+        let second = AppSettings(defaults: defaults, keychain: keychain)
+        XCTAssertEqual(second.selectedSlot, .secondary)
+        XCTAssertEqual(try XCTUnwrap(second.baseURL).port, 8081)
+        XCTAssertEqual(second.baseURL?.host, "192.168.1.83")
+    }
+
+    func testSelectionFallsBackWhenTheSecondaryIsNotSetUp() {
+        let settings = AppSettings(defaults: freshDefaults(), keychain: freshKeychain())
+        settings.selectedSlot = .secondary
+        XCTAssertEqual(settings.selectedSlot, .primary, "no address yet")
+
+        settings.setBaseURLString("http://192.168.1.83:8081", for: .secondary)
+        XCTAssertEqual(settings.selectedSlot, .secondary)
+
+        settings.removeSecondary()
+        XCTAssertEqual(settings.selectedSlot, .primary)
+        XCTAssertEqual(settings.configuredSlots, [.primary])
+        XCTAssertNil(settings.makeClient(for: .secondary))
+    }
+
+    func testDisplayNameFallsBackToTheSlotName() {
+        let settings = AppSettings(defaults: freshDefaults(), keychain: freshKeychain())
+        XCTAssertEqual(settings.displayName(for: .primary), "Server 1")
+        XCTAssertEqual(settings.displayName(for: .secondary), "Server 2")
+        settings.setName("Mac Studio", for: .primary)
+        XCTAssertEqual(settings.displayName(for: .primary), "Mac Studio")
+        settings.setName("   ", for: .primary)
+        XCTAssertEqual(settings.displayName(for: .primary), "Server 1")
+    }
+
+    func testMakeClientForEachSlot() {
+        let settings = AppSettings(defaults: freshDefaults(), keychain: freshKeychain())
+        XCTAssertNil(settings.makeClient(for: .secondary))
+        settings.setBaseURLString("http://192.168.1.83:8081", for: .secondary)
+        settings.setAPIKey("two", for: .secondary)
+        let client = settings.makeClient(for: .secondary)
+        XCTAssertEqual(client?.baseURL.absoluteString, "http://192.168.1.83:8081")
+        XCTAssertEqual(client?.apiKey, "two")
+        XCTAssertNotNil(settings.makeClient(for: .primary))
+    }
+
+    #if DEBUG
+    func testAdoptSecondaryFromEnvironment() {
+        let keychain = freshKeychain()
+        let settings = AppSettings(defaults: freshDefaults(), keychain: keychain)
+        settings.adoptSecondaryFromEnvironment(["STRATA_SERVER_2": "not a url"])
+        XCTAssertFalse(settings.isConfigured(.secondary))
+
+        settings.adoptSecondaryFromEnvironment([
+            "STRATA_SERVER_2": " http://192.168.1.172:8080 ",
+            "STRATA_API_KEY_2": "k2",
+            "STRATA_NAME_2": "Coder",
+        ])
+        XCTAssertEqual(settings.baseURLString(for: .secondary), "http://192.168.1.172:8080")
+        XCTAssertEqual(keychain.get("apiKey.secondary"), "k2")
+        XCTAssertEqual(settings.displayName(for: .secondary), "Coder")
+
+        settings.adoptSecondaryFromEnvironment(["STRATA_SERVER_2": "http://10.0.0.1:8080"])
+        XCTAssertEqual(settings.baseURLString(for: .secondary), "http://192.168.1.172:8080", "a saved server wins")
+    }
+    #endif
 }

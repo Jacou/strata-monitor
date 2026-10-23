@@ -166,6 +166,17 @@ public final class MetricsPoller {
         resume()
     }
 
+    /// Another server picked: like `update(client:)`, but nothing from the old server may stay on
+    /// screen under the new one's name, so its payload and trend series go too.
+    public func switchServer(to client: StrataClient) {
+        metrics = nil
+        lastUpdated = nil
+        trendRequests = []
+        trendsUpdated = nil
+        update(client: client)
+        if isActive { Task { await refreshTrends() } }
+    }
+
     /// "Show all" reads the full list from the same one-off `metrics?requests=all` fetch the trends
     /// card uses (`trendRequests`), never from the 1 s loop: that payload is ten times the size.
     public func setAllRequests(_ all: Bool) {

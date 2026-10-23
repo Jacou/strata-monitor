@@ -79,7 +79,25 @@ public struct RootView: View {
                 .tag(AppTab.settings)
         }
         .tint(Theme(scheme: colorScheme).accent)
+        .minimizesTabBarOnScroll()
+        // The server dropdown on any tab: the poller follows, and drops what the last server said.
+        .onChange(of: settings.selectedSlot) { _, _ in
+            poller.switchServer(to: settings.makeClient() ?? StrataClient(baseURL: AppSettings.defaultBaseURL))
+        }
         // One overlay for all five tabs: scrolled content must not run under the status bar.
         .themeTopScrim()
+    }
+}
+
+private extension View {
+    /// iOS 26: scrolling down shrinks the tab bar to a single pill for the current tab; scrolling
+    /// back up brings it back. iPhone only — iPad keeps its bar. Earlier systems keep the full bar.
+    @ViewBuilder
+    func minimizesTabBarOnScroll() -> some View {
+        if #available(iOS 26.0, *) {
+            tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            self
+        }
     }
 }

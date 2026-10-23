@@ -11,7 +11,7 @@ struct MenuBarPopover: View {
     static let sparklineHeight: CGFloat = 28
     static let requestCount = 5
 
-    let model: MenuBarModel
+    let model: ServerMonitorModel
 
     @Environment(\.theme) private var theme
     @Environment(\.openSettings) private var openSettings
@@ -20,6 +20,14 @@ struct MenuBarPopover: View {
         let monitor = model.monitor ?? MonitorViewModel(metrics: Metrics())
 
         VStack(spacing: 10) {
+            if let name = model.cardName {
+                Text(name)
+                    .font(.headline)
+                    .foregroundStyle(theme.textPrimary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             header
 
             if model.isConfigured {
@@ -141,9 +149,14 @@ struct MenuBarPopover: View {
         .strataCard(theme)
     }
 
+    /// "Mac Studio · qwen3.8-flash-next" when two servers share the menu bar, the model alone otherwise.
+    private var footerTitle: String {
+        [model.cardName, model.modelName].compactMap { $0 }.joined(separator: " · ").nonEmpty ?? "Strata"
+    }
+
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(model.modelName ?? "Strata")
+            Text(footerTitle)
                 .font(theme.subFont)
                 .foregroundStyle(theme.textSecondary)
                 .lineLimit(1)
@@ -167,4 +180,8 @@ struct MenuBarPopover: View {
         }
         .padding(.top, 2)
     }
+}
+
+private extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
 }

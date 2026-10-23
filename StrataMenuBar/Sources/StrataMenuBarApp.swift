@@ -19,12 +19,27 @@ struct StrataMenuBarApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = MenuBarModel()
-    private var controller: StatusItemController?
+    /// One menu bar item per configured server.
+    private var controllers: [StatusItemController] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let controller = StatusItemController(model: model)
-        controller.install()
-        self.controller = controller
+        model.onServersChanged = { [weak self] in self?.syncStatusItems() }
+        syncStatusItems()
+    }
+
+    /// Add an item for a server that just got set up, drop the one for a server just removed.
+    /// macOS puts a new item to the left of the existing ones, so the primary is installed first.
+    private func syncStatusItems() {
+        let servers = model.servers
+        for controller in controllers where !servers.contains(where: { $0 === controller.server }) {
+            controller.uninstall()
+        }
+        controllers = servers.map { server in
+            if let existing = controllers.first(where: { $0.server === server }) { return existing }
+            let controller = StatusItemController(server: server)
+            controller.install()
+            return controller
+        }
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
@@ -36,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// with the icon pinned to that edge the item grows leftward when the text changes: the icon — which
 /// both cards are anchored to — keeps its screen position while `idle` becomes `104 t/s`.
 struct MenuBarStatusLabel: View {
-    let model: MenuBarModel
+    let model: ServerMonitorModel
     /// False while a card is open and the item's width is pinned too narrow for the digits: the card
     /// says all of it anyway, so show the icon rather than clipped text.
     var showsText = true
@@ -46,6 +61,11 @@ struct MenuBarStatusLabel: View {
         let text = showsText ? MenuBarLabel.text(for: status) : ""
 
         HStack(spacing: 5) {
+            // Which server, when there are two: on the left, so the icon keeps the right edge.
+            if let tag = model.tag, !tag.isEmpty {
+                Text(tag)
+                    .foregroundStyle(.secondary)
+            }
             if !text.isEmpty {
                 Text(text).monospacedDigit()
             }
@@ -55,6 +75,7 @@ struct MenuBarStatusLabel: View {
         .foregroundStyle(.primary)
         .fixedSize()
         // The hover card is the real answer; this is the fallback VoiceOver and slow hovers get.
-        .help(MenuBarLabel.tooltip(model: model.modelName, lastRow: model.monitor?.requests.first))
+        .help([model.cardName, MenuBarLabel.tooltip(model: model.modelName, lastRow: model.monitor?.requests.first)]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
     }
 }

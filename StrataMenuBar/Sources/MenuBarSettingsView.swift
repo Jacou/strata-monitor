@@ -2,13 +2,17 @@ import AppKit
 import StrataCore
 import SwiftUI
 
-/// The Settings window: the same fields and the same connection test as the iOS Settings tab, plus
-/// "Launch at login" and how often to refresh while nothing is on screen.
+/// The Settings window: the same fields and the same connection test as the iOS Settings tab — one
+/// server at a time, each with its own menu bar item — plus "Launch at login" and how often to
+/// refresh while nothing is on screen.
 struct MenuBarSettingsView: View {
     let model: MenuBarModel
 
     @Environment(\.theme) private var theme
 
+    /// Which server the fields below edit.
+    @State private var editingSlot: ServerSlot = .primary
+    @State private var nameDraft = ""
     @State private var urlDraft = ""
     @State private var keyDraft = ""
     @State private var tester = ConnectionTester()
@@ -16,6 +20,7 @@ struct MenuBarSettingsView: View {
     @State private var loginNote: String?
     @State private var cadenceDraft = AppSettings.defaultClosedPollInterval
     @State private var draftsLoaded = false
+    @State private var confirmRemove = false
 
     private var draftURL: URL? { AppSettings.validURL(urlDraft) }
     private var canSave: Bool { draftURL != nil }
@@ -23,6 +28,26 @@ struct MenuBarSettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                Picker("Server", selection: $editingSlot) {
+                    ForEach(ServerSlot.allCases) { slot in
+                        Text(model.settings.displayName(for: slot)).tag(slot)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .onChange(of: editingSlot) { _, _ in reloadServerDrafts() }
+
+                TextField("Name", text: $nameDraft, prompt: Text(editingSlot.defaultName))
+                    .textFieldStyle(.roundedBorder)
+
+                Text(editingSlot == .secondary && !model.settings.isConfigured(.secondary)
+                     ? "Give a second server an address and it gets its own menu bar item."
+                     : "With two servers, the start of each name (or 1 / 2) sits in front of its menu bar item.")
+                    .font(.footnote)
+                    .foregroundStyle(theme.textSecondary)
+            }
+
             Section("Server address") {
                 TextField("http://192.168.1.10:8081", text: $urlDraft)
                     .textFieldStyle(.roundedBorder)
@@ -36,10 +61,17 @@ struct MenuBarSettingsView: View {
                         .foregroundStyle(theme.dangerText)
                 }
 
-                Button("Use the default") { urlDraft = AppSettings.defaultBaseURLString }
-                    .font(.footnote)
-                    .foregroundStyle(theme.accentText)
-                    .disabled(urlDraft == AppSettings.defaultBaseURLString)
+                HStack {
+                    if editingSlot == .primary {
+                        Button("Use the default") { urlDraft = AppSettings.defaultBaseURLString }
+                            .disabled(urlDraft == AppSettings.defaultBaseURLString)
+                    } else if model.settings.isConfigured(.secondary) {
+                        Button("Remove \(model.settings.displayName(for: .secondary))…") { confirmRemove = true }
+                            .foregroundStyle(theme.dangerText)
+                    }
+                }
+                .font(.footnote)
+                .foregroundStyle(theme.accentText)
             }
 
             Section("API key") {
@@ -88,10 +120,9 @@ struct MenuBarSettingsView: View {
                 }
 
                 HStack {
-                    LabeledContent("Address",
-                                   value: model.settings.isValidBaseURL ? model.settings.baseURLString : "invalid — not used")
+                    LabeledContent("Address", value: savedAddressText)
                     LabeledContent("API key",
-                                   value: model.settings.hasAPIKey ? "stored in the Keychain" : "not set")
+                                   value: model.settings.hasAPIKey(for: editingSlot) ? "stored in the Keychain" : "not set")
                 }
 
                 HStack {
@@ -115,29 +146,57 @@ struct MenuBarSettingsView: View {
         }
         .formStyle(.grouped)
         .padding(12)
-        .frame(width: 460, height: 480)
+        .frame(width: 460, height: 600)
         .background(ThemeBackground())
         .onAppear(perform: loadDrafts)
+        .confirmationDialog("Remove \(model.settings.displayName(for: .secondary))?",
+                            isPresented: $confirmRemove) {
+            Button("Remove", role: .destructive) { removeSecondary() }
+        } message: {
+            Text("Its address, name and API key are forgotten, and its menu bar item goes away.")
+        }
     }
 
     // MARK: - actions
 
+    private var savedAddressText: String {
+        let address = model.settings.baseURLString(for: editingSlot)
+        if address.isEmpty { return "not set" }
+        return model.settings.baseURL(for: editingSlot) != nil ? address : "invalid — not used"
+    }
+
     private func loadDrafts() {
         guard !draftsLoaded else { return }
         draftsLoaded = true
-        urlDraft = model.settings.baseURLString
-        keyDraft = model.settings.apiKey
+        reloadServerDrafts()
         cadenceDraft = model.settings.closedPollInterval
         launchAtLogin = LaunchAtLogin.isEnabled
     }
 
+    private func reloadServerDrafts() {
+        nameDraft = model.settings.name(for: editingSlot)
+        urlDraft = model.settings.baseURLString(for: editingSlot)
+        keyDraft = model.settings.apiKey(for: editingSlot)
+        tester.reset()
+    }
+
+    /// Saves the server being edited and the cadence; a newly set-up second server gets its item.
     private func save() {
         guard canSave else { return }
-        model.settings.baseURLString = trimmed(urlDraft)
-        model.settings.apiKey = keyDraft
+        model.settings.setName(nameDraft, for: editingSlot)
+        model.settings.setBaseURLString(trimmed(urlDraft), for: editingSlot)
+        model.settings.setAPIKey(keyDraft, for: editingSlot)
         model.settings.closedPollInterval = cadenceDraft
+        nameDraft = model.settings.name(for: editingSlot)
         model.reconnect()
         tester.reset()
+    }
+
+    private func removeSecondary() {
+        model.settings.removeSecondary()
+        model.reconnect()
+        editingSlot = .primary
+        reloadServerDrafts()
     }
 
     private func testConnection() {

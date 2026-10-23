@@ -41,7 +41,7 @@ public struct MonitorView: View {
 
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
-                            ScreenTitle("Monitor")
+                            ScreenTitleRow("Monitor")
 
                             header
 

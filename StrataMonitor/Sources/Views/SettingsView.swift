@@ -8,16 +8,21 @@ public struct SettingsView: View {
     @Environment(\.theme) private var theme
 
     @State private var tester = ConnectionTester()
+    /// Which server the fields below edit — not necessarily the one the app is showing.
+    @State private var editingSlot: ServerSlot = .primary
+    @State private var nameDraft = ""
     @State private var urlDraft = ""
     @State private var keyDraft = ""
     @State private var showKey = false
     @State private var draftsLoaded = false
+    @State private var confirmRemove = false
 
     public init() {}
 
     private var draftURL: URL? { AppSettings.validURL(urlDraft) }
     private var canSave: Bool { draftURL != nil }
     private var busy: Bool { tester.state == .testing }
+    private var editingShown: Bool { editingSlot == settings.selectedSlot }
 
     public var body: some View {
         NavigationStack {
@@ -27,6 +32,31 @@ public struct SettingsView: View {
                 ScreenTitle("Settings")
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
+
+                Section {
+                    Picker("Server", selection: $editingSlot) {
+                        ForEach(ServerSlot.allCases) { slot in
+                            Text(settings.displayName(for: slot)).tag(slot)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: editingSlot) { _, _ in reloadDrafts() }
+                } footer: {
+                    Text(editingSlot == .secondary && !settings.isConfigured(.secondary)
+                         ? "Give a second server an address to switch between the two from any tab."
+                         : "Edit one server at a time; the dropdown beside each title picks the one shown.")
+                }
+                .listRowBackground(Color.clear)
+
+                Section {
+                    TextField(editingSlot.defaultName, text: $nameDraft)
+                        .autocorrectionDisabled()
+                        .foregroundStyle(theme.textPrimary)
+                } header: {
+                    Text("Name")
+                } footer: {
+                    Text("Shown in the server menu.")
+                }
 
                 Section("Server address") {
                     TextField("http://192.168.1.10:8081", text: $urlDraft)
@@ -43,10 +73,12 @@ public struct SettingsView: View {
                             .foregroundStyle(theme.dangerText)
                     }
 
-                    Button("Use the default") { urlDraft = AppSettings.defaultBaseURLString }
-                        .font(.footnote)
-                        .foregroundStyle(theme.accentText)
-                        .disabled(urlDraft == AppSettings.defaultBaseURLString)
+                    if editingSlot == .primary {
+                        Button("Use the default") { urlDraft = AppSettings.defaultBaseURLString }
+                            .font(.footnote)
+                            .foregroundStyle(theme.accentText)
+                            .disabled(urlDraft == AppSettings.defaultBaseURLString)
+                    }
                 }
 
                 Section("API key") {
@@ -75,7 +107,7 @@ public struct SettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(theme.textSecondary)
 
-                    if poller.status == .unauthorized {
+                    if editingShown, poller.status == .unauthorized {
                         Label(
                             settings.hasAPIKey
                                 ? "This server rejected the saved key."
@@ -108,12 +140,29 @@ public struct SettingsView: View {
                             .foregroundStyle(tester.state.isOK ? theme.accentText : theme.dangerText)
                     }
                 } footer: {
-                    Text("Save points the live poller at the new address and key.")
+                    Text(editingShown
+                         ? "Save points the live poller at the new address and key."
+                         : "Save stores this server; pick it from the dropdown to see it.")
                 }
 
                 Section("Saved") {
-                    LabeledContent("Address", value: settings.isValidBaseURL ? settings.baseURLString : "invalid — not used")
-                    LabeledContent("API key", value: settings.hasAPIKey ? "stored in the Keychain" : "not set")
+                    LabeledContent("Name", value: settings.displayName(for: editingSlot))
+                    LabeledContent("Address", value: savedAddressText)
+                    LabeledContent("API key", value: settings.hasAPIKey(for: editingSlot) ? "stored in the Keychain" : "not set")
+                }
+
+                if editingSlot == .secondary, settings.isConfigured(.secondary) {
+                    Section {
+                        Button("Remove \(settings.displayName(for: .secondary))", role: .destructive) {
+                            confirmRemove = true
+                        }
+                    }
+                    .confirmationDialog("Remove \(settings.displayName(for: .secondary))?",
+                                        isPresented: $confirmRemove, titleVisibility: .visible) {
+                        Button("Remove", role: .destructive) { removeSecondary() }
+                    } message: {
+                        Text("Its address, name and API key are forgotten.")
+                    }
                 }
             }
             .scrollContentBackground(.hidden)
@@ -127,21 +176,43 @@ public struct SettingsView: View {
 
     // MARK: - actions
 
+    private var savedAddressText: String {
+        let address = settings.baseURLString(for: editingSlot)
+        if address.isEmpty { return "not set" }
+        return settings.baseURL(for: editingSlot) != nil ? address : "invalid — not used"
+    }
+
     private func loadDrafts() {
         guard !draftsLoaded else { return }
         draftsLoaded = true
-        urlDraft = settings.baseURLString
-        keyDraft = settings.apiKey
+        editingSlot = settings.selectedSlot
+        reloadDrafts()
+    }
+
+    private func reloadDrafts() {
+        nameDraft = settings.name(for: editingSlot)
+        urlDraft = settings.baseURLString(for: editingSlot)
+        keyDraft = settings.apiKey(for: editingSlot)
+        tester.reset()
     }
 
     private func save() {
         guard canSave else { return }
-        settings.baseURLString = trimmed(urlDraft)
-        settings.apiKey = keyDraft
-        if let client = settings.makeClient() {
+        settings.setName(nameDraft, for: editingSlot)
+        settings.setBaseURLString(trimmed(urlDraft), for: editingSlot)
+        settings.setAPIKey(keyDraft, for: editingSlot)
+        nameDraft = settings.name(for: editingSlot)
+        if editingShown, let client = settings.makeClient() {
             poller.update(client: client)
         }
         tester.reset()
+    }
+
+    /// The selection falls back to the primary server, and RootView moves the poller with it.
+    private func removeSecondary() {
+        settings.removeSecondary()
+        editingSlot = .primary
+        reloadDrafts()
     }
 
     private func testConnection() {

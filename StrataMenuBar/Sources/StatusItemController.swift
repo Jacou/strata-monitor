@@ -48,7 +48,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     /// The slice of the item the icon occupies, and therefore the rect both cards anchor to.
     static let iconAnchorWidth: CGFloat = 18
 
-    private let model: MenuBarModel
+    let server: ServerMonitorModel
+    private var model: ServerMonitorModel { server }
 
     private var statusItem: NSStatusItem?
     private var labelHosting: PassthroughHostingView<AnyView>?
@@ -69,12 +70,14 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     /// True during the click that swaps the hover card for the full popover, so the width stays pinned
     /// across the handoff instead of resizing between the two cards.
     private var cardHandoff = false
+    /// False once `uninstall()` ran, so a late observation callback does not re-arm itself.
+    private var isInstalled = true
 
     private let fullPopover = NSPopover()
     private let hoverPopover = NSPopover()
 
-    init(model: MenuBarModel) {
-        self.model = model
+    init(server: ServerMonitorModel) {
+        self.server = server
         super.init()
 
         fullPopover.behavior = .transient
@@ -99,7 +102,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         button.target = self
         button.action = #selector(statusItemClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        button.setAccessibilityLabel("Strata Monitor")
+        // Each server's item keeps its own place after a ⌘-drag.
+        item.autosaveName = "StrataMonitor.\(server.slot.rawValue)"
+        button.setAccessibilityLabel("Strata Monitor — \(server.displayName)")
 
         let hosting = PassthroughHostingView(rootView: labelRootView(showsText: true))
         // Only the height is AppKit's: the width and the flush-right origin are ours (placeLabel).
@@ -120,6 +125,24 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             }
         }
         #endif
+    }
+
+    /// The server was removed in Settings: take the item out of the menu bar and stop watching.
+    func uninstall() {
+        isInstalled = false
+        pendingShow?.cancel()
+        pendingHide?.cancel()
+        hoverPopover.close()
+        fullPopover.close()
+        if let localPointerMonitor { NSEvent.removeMonitor(localPointerMonitor) }
+        if let globalPointerMonitor { NSEvent.removeMonitor(globalPointerMonitor) }
+        localPointerMonitor = nil
+        globalPointerMonitor = nil
+        pointerCheck?.invalidate()
+        pointerCheck = nil
+        if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
+        statusItem = nil
+        labelHosting = nil
     }
 
     /// Where the pointer is, in screen coordinates: the item's rect in its own window, pushed out
@@ -272,9 +295,12 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         withObservationTracking {
             _ = model.status
             _ = model.modelName
+            _ = model.tag
+            _ = model.displayName
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, self.isInstalled else { return }
+                self.statusItem?.button?.setAccessibilityLabel("Strata Monitor — \(self.server.displayName)")
                 self.refreshLabel()
                 self.observeModel()
             }
