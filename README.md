@@ -9,6 +9,8 @@ the expert and conversation caches, every recent request, and the trends across 
 - **iOS / iPadOS** — Monitor, Chat, Config, About, Settings tabs.
 - **macOS** — a menu bar item that shows the live speed, a hover card at a glance, a full popover
   on click.
+- **Basalt too** — point it at a Basalt server and the apps notice (from `/health`) and adapt;
+  see [Basalt servers](#basalt-servers).
 - No third-party packages. Swift 6, SwiftUI, iOS 18+ / macOS 15+.
 
 <p align="center">
@@ -80,6 +82,34 @@ side by side, content capped at 1200 pt. A narrow Split View falls back to the i
   altogether and the card says "Paused · click to retry". A click, a wake from sleep, an unlock
   or new settings start it again. Nothing is fetched while the Mac sleeps or the screen is locked.
 
+## Basalt servers
+
+Basalt answers the same `/health`, `/metrics` and `/v1` endpoints with the same API key, so it is
+the same app. `/health` says `"service": "basalt"`, and the apps adapt:
+
+- **Theme** — Basalt's ember orange from its own web page, in place of Strata's cyan, with a
+  "Basalt server" badge over every screen title (and "Strata server" in blue on Strata). The
+  engine each address answered last is remembered, so a Basalt server opens orange. On the Mac,
+  each server's popover and hover card take that server's colours.
+- **GPU tiles** — Basalt reports each card but not the totals; they are added up the way Strata
+  does (mean load, summed VRAM and power, the hotter card, the slower PCIe link).
+- **Sparklines** — Basalt keeps a history of the two speeds only; the apps sample the rest from
+  each poll.
+- **Slots** — Basalt runs two requests side by side. With more than one slot, `GET /slots` is read
+  each tick: a Slots card shows each slot's state, speed, context and draft acceptance; the live
+  card and Speed tile count the streams ("2 requests running · 76.0 tok/s total"); the context
+  ring follows the fullest slot. A **Queue** card appears while requests wait for a free slot.
+- **Experts** — where the last request's routed expert lookups came from: VRAM, the peer GPU,
+  or the CPU.
+- **Server log** — from the Monitor, a live tail of `GET /api/logs` with All / Warnings / Errors
+  and search.
+- **About** — engine and version, NVFP4 weights, slot count, every GPU by name, NVIDIA driver and
+  CUDA. **Config** is hidden: Basalt has no run config.
+- **Menu bar** — the popover gets the Queue, Slots and Experts cards; the hover card names both
+  streams ("Generating · 2 streams", 40 + 40).
+
+An address pasted from Basalt's web page (`http://host:8082/#stats`) works as it is.
+
 ## Build
 
 Requires Xcode 16+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
@@ -136,7 +166,7 @@ tools/                    icon generator, mock server for states the live server
   the apps follow the system appearance. `ThemeTests` enforces WCAG AA contrast on every text pair.
 - **Lenient decoding** — every field of `/metrics` is optional, so a newer or older Strata still
   renders what it sends.
-- **Tests** — 349 across the package and the apps, driven by real server payloads in
+- **Tests** — 374 across the package and the apps, driven by real server payloads in
   `Packages/StrataCore/Tests/StrataCoreTests/Fixtures`. `swift test --package-path Packages/StrataCore`
   runs the shared ones on the Mac.
 

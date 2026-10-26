@@ -154,7 +154,7 @@ final class AboutViewModelTests: XCTestCase {
     func testRepositoryLinkAndEmptyState() {
         let empty = AboutViewModel(metrics: nil, baseURL: nil, locale: locale)
         XCTAssertTrue(empty.isEmpty)
-        XCTAssertEqual(empty.repositoryURL.absoluteString, "https://github.com/Niko1221/Strata")
+        XCTAssertEqual(empty.repositoryURL?.absoluteString, "https://github.com/Niko1221/Strata")
         XCTAssertFalse(model(generating).isEmpty)
     }
 }

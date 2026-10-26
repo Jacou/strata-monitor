@@ -81,6 +81,16 @@ public struct StrataClient: Sendable {
         return try await get(path: "metrics", query: query, as: Metrics.self)
     }
 
+    /// Basalt: `GET /slots`, one entry per parallel request slot.
+    public func slots() async throws -> [Slot] {
+        try await get(path: "slots", query: [], as: [Slot].self)
+    }
+
+    /// Basalt: `GET /api/logs?after=N`, the server log lines after id N (0 for the newest few hundred).
+    public func logs(after: Int) async throws -> LogBatch {
+        try await get(path: "api/logs", query: [URLQueryItem(name: "after", value: String(after))], as: LogBatch.self)
+    }
+
     /// `GET /config`: the run-config keys this server will edit. 404 when it has no run config.
     public func config() async throws -> ConfigResponse {
         try await get(path: "config", query: [], as: ConfigResponse.self)
@@ -189,6 +199,8 @@ public struct StrataClient: Sendable {
         let base = components.path
         components.path = (base.hasSuffix("/") ? String(base.dropLast()) : base) + "/" + path
         components.queryItems = query.isEmpty ? nil : query
+        // An address pasted from the web page can carry "#stats"; it means nothing to the API.
+        components.fragment = nil
         guard let url = components.url else { return nil }
 
         var request = URLRequest(url: url)

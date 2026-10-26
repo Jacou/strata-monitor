@@ -15,7 +15,7 @@ public struct AboutView: View {
 
     public var body: some View {
         NavigationStack {
-            let model = AboutViewModel(metrics: poller.metrics, baseURL: settings.baseURL)
+            let model = AboutViewModel(metrics: poller.metrics, baseURL: settings.baseURL, health: poller.health)
 
             ScrollViewReader { proxy in
                 List {
@@ -43,12 +43,14 @@ public struct AboutView: View {
                     }
 
                     Section {
-                        Link(destination: model.repositoryURL) {
-                            Label("github.com/Niko1221/Strata", systemImage: "arrow.up.right.square")
-                                .foregroundStyle(theme.accentText)
+                        if let repository = model.repositoryURL {
+                            Link(destination: repository) {
+                                Label("github.com/Niko1221/Strata", systemImage: "arrow.up.right.square")
+                                    .foregroundStyle(theme.accentText)
+                            }
                         }
                     } footer: {
-                        Text("Strata Monitor reads the same endpoints as the server's own web Monitor.")
+                        Text("This app reads the same endpoints as the \(poller.engine.name) server's own web page.")
                     }
                 }
                 #if DEBUG

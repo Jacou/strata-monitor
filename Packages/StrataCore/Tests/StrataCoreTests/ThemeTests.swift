@@ -6,6 +6,9 @@ import SwiftUI
 final class ThemeTests: XCTestCase {
     private let dark = Theme(scheme: .dark)
     private let light = Theme(scheme: .light)
+    private let basaltDark = Theme(scheme: .dark, engine: .basalt)
+    private let basaltLight = Theme(scheme: .light, engine: .basalt)
+    private var all: [Theme] { [dark, light, basaltDark, basaltLight] }
 
     // MARK: - tokens
 
@@ -52,6 +55,22 @@ final class ThemeTests: XCTestCase {
         XCTAssertEqual(light.raw.separatorAlpha, 0.07, accuracy: 0.001)
     }
 
+    /// Basalt's own web page: basalt greys and the ember accent, with a yellow warn.
+    func testBasaltTokens() {
+        XCTAssertEqual(Theme(scheme: .dark).engine, .strata, "Strata until a server says otherwise")
+        XCTAssertEqual(basaltDark.raw.background, 0x0E1114)
+        XCTAssertEqual(basaltDark.raw.accent, 0xFF7A3D)
+        XCTAssertEqual(basaltDark.raw.accentDim, 0xB8401A)
+        XCTAssertEqual(basaltDark.raw.headerGlow, 0xF2662B)
+        XCTAssertEqual(basaltDark.raw.warn, 0xE9C341)
+        XCTAssertEqual(basaltDark.raw.textPrimary, 0xE9ECEE)
+        XCTAssertEqual(basaltDark.raw.textSecondary, 0x9AA4AD)
+        XCTAssertEqual(basaltLight.raw.accent, 0xE8601F)
+        XCTAssertEqual(basaltLight.rawAccentText, 0xB0400F)
+        XCTAssertNotEqual(basaltDark, dark)
+        XCTAssertNotEqual(basaltDark.raw.warn, basaltDark.raw.accent, "a warning must not read as the accent")
+    }
+
     func testShapeTokens() {
         for theme in [dark, light] {
             XCTAssertEqual(theme.cardRadius, 16)
@@ -96,7 +115,7 @@ final class ThemeTests: XCTestCase {
     // MARK: - status colours
 
     func testStatusColoursComeFromTheTheme() {
-        for theme in [dark, light] {
+        for theme in all {
             XCTAssertEqual(MonitorStatus.unknown.color(in: theme), theme.textSecondary)
             XCTAssertEqual(MonitorStatus.idle.color(in: theme), theme.textSecondary)
             XCTAssertEqual(MonitorStatus.reading(percent: 42).color(in: theme), theme.accentText)
@@ -115,7 +134,7 @@ final class ThemeTests: XCTestCase {
     }
 
     func testToneColours() {
-        for theme in [dark, light] {
+        for theme in all {
             XCTAssertEqual(MonitorViewModel.Tone.normal.color(in: theme), theme.accent)
             XCTAssertEqual(MonitorViewModel.Tone.info.color(in: theme), theme.accent)
             XCTAssertEqual(MonitorViewModel.Tone.warn.color(in: theme), theme.warn)
@@ -126,7 +145,7 @@ final class ThemeTests: XCTestCase {
     // MARK: - contrast (WCAG, every text/background pair must clear 4.5:1)
 
     func testTextContrast() {
-        for theme in [dark, light] {
+        for theme in all {
             let onBackground: [(UInt32, UInt32)] = [
                 (theme.raw.textPrimary, theme.raw.background),
                 (theme.raw.textSecondary, theme.raw.background),
@@ -143,7 +162,7 @@ final class ThemeTests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(
                     ratio, 4.5,
                     String(format: "%06X on %06X is %.2f:1 in %@ (needs 4.5:1)",
-                          front, back, ratio, theme.scheme == .dark ? "dark" : "light")
+                          front, back, ratio, "\(theme.engine.name) \(theme.scheme == .dark ? "dark" : "light")")
                 )
             }
         }
@@ -152,7 +171,7 @@ final class ThemeTests: XCTestCase {
     /// Accent, warn and danger carry text too (pill, badges, Speed value), which is why the theme
     /// keeps text variants of them: the table's light accent is 3.7:1 and its light warn 3.3:1.
     func testTextVariantsClearContrast() {
-        for theme in [dark, light] {
+        for theme in all {
             for (name, hex) in [("accent", theme.rawAccentText), ("warn", theme.rawWarnText), ("danger", theme.rawDangerText)] {
                 for background in [theme.raw.background, theme.raw.cardBottom, theme.raw.cardTop] {
                     let ratio = Self.contrast(hex, background)

@@ -28,7 +28,8 @@ public struct StrataMonitorApp: App {
                 .environment(settings)
                 .environment(poller)
                 .environment(chat)
-                .strataTheme()
+                // Strata's cyan or Basalt's ember, whichever engine the shown server runs.
+                .strataTheme { poller.engine }
                 .task { poller.start() }
                 .onChange(of: scenePhase) { _, phase in
                     // 1 s polling only in the foreground, like the web page's tab.

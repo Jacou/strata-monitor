@@ -1,0 +1,47 @@
+{
+  "lines": [
+    {
+      "id": 39784,
+      "t": 1793014822.929,
+      "src": "srv",
+      "lvl": "info",
+      "msg": "thinking: 2495 of max 32768 tokens, 74.2 tok/s, 42 s"
+    },
+    {
+      "id": 39785,
+      "t": 1793014823.933,
+      "src": "srv",
+      "lvl": "info",
+      "msg": "thinking: 2571 of max 32768 tokens, 74.2 tok/s, 43 s"
+    },
+    {
+      "id": 39786,
+      "t": 1793014824.948,
+      "src": "srv",
+      "lvl": "info",
+      "msg": "thinking: 2637 of max 32768 tokens, 74.0 tok/s, 44 s"
+    },
+    {
+      "id": 39787,
+      "t": 1793014825.976,
+      "src": "srv",
+      "lvl": "info",
+      "msg": "thinking: 2707 of max 32768 tokens, 73.8 tok/s, 45 s"
+    },
+    {
+      "id": 39788,
+      "t": 1793014826.476,
+      "src": "srv",
+      "lvl": "warn",
+      "msg": "slot 1: prompt 176454 tokens is close to the 262144 context"
+    },
+    {
+      "id": 39789,
+      "t": 1793014826.976,
+      "src": "eng",
+      "lvl": "err",
+      "msg": "request r_1641 failed: client disconnected"
+    }
+  ],
+  "last": 39789
+}

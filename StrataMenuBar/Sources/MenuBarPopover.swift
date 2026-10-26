@@ -2,8 +2,9 @@ import AppKit
 import StrataCore
 import SwiftUI
 
-/// The window under the menu bar item: the pill, the live state, the eight tiles in two columns,
-/// the context ring with the resource bars, the last five requests, and a footer.
+/// The window under the menu bar item: the pill, the live state, Basalt's queue and slots, the
+/// eight tiles in two columns, the context ring with the resource bars, Basalt's expert sources,
+/// the last five requests, and a footer.
 struct MenuBarPopover: View {
     static let contentWidth: CGFloat = 360
     static let contentHeight: CGFloat = 520
@@ -20,13 +21,16 @@ struct MenuBarPopover: View {
         let monitor = model.monitor ?? MonitorViewModel(metrics: Metrics())
 
         VStack(spacing: 10) {
-            if let name = model.cardName {
-                Text(name)
-                    .font(.headline)
-                    .foregroundStyle(theme.textPrimary)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                EngineBadge(engine: model.engine)
+                if let name = model.cardName {
+                    Text(name)
+                        .font(.headline)
+                        .foregroundStyle(theme.textPrimary)
+                        .lineLimit(1)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             header
 
@@ -34,6 +38,12 @@ struct MenuBarPopover: View {
                 ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: 10) {
                         LiveStateCard(card: monitor.live)
+                        if let queue = monitor.queue {
+                            QueueCardView(card: queue)
+                        }
+                        if let slots = monitor.slots {
+                            SlotsCardView(card: slots, compact: true)
+                        }
                         tiles(monitor)
                         ResourcesCard(
                             context: monitor.context,
@@ -41,6 +51,9 @@ struct MenuBarPopover: View {
                             ram: monitor.ram,
                             temp: monitor.temp
                         )
+                        if model.engine == .basalt, let sources = monitor.expertSources {
+                            ExpertSourcesCardView(sources: sources)
+                        }
                         requests(monitor)
                     }
                     .padding(.bottom, 2)
@@ -140,7 +153,7 @@ struct MenuBarPopover: View {
             Text("No server yet")
                 .font(.headline)
                 .foregroundStyle(theme.textPrimary)
-            Text("Open Settings and set the Strata server address and its API key.")
+            Text("Open Settings and set the server address and its API key.")
                 .font(theme.subFont)
                 .foregroundStyle(theme.textSecondary)
                 .multilineTextAlignment(.leading)
@@ -151,7 +164,7 @@ struct MenuBarPopover: View {
 
     /// "Mac Studio · qwen3.8-flash-next" when two servers share the menu bar, the model alone otherwise.
     private var footerTitle: String {
-        [model.cardName, model.modelName].compactMap { $0 }.joined(separator: " · ").nonEmpty ?? "Strata"
+        [model.cardName, model.modelName].compactMap { $0 }.joined(separator: " · ").nonEmpty ?? model.engine.name
     }
 
     private var footer: some View {
@@ -163,7 +176,7 @@ struct MenuBarPopover: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 14) {
-                Button("Open Strata web page") {
+                Button("Open \(model.engine.name) web page") {
                     if let url = model.baseURL { NSWorkspace.shared.open(url) }
                 }
                 Button("Settings…") {

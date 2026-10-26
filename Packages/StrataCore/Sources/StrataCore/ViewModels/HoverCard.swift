@@ -29,6 +29,7 @@ public struct HoverCard: Sendable, Equatable {
         model: String?,
         lastUpdated: Date?,
         paused: Bool = false,
+        slots: [Slot] = [],
         now: Date = .now,
         locale: Locale = .autoupdatingCurrent
     ) {
@@ -37,9 +38,18 @@ public struct HoverCard: Sendable, Equatable {
         let state = live?.state
         let generating = state == .generating
 
+        // Basalt running two requests at once: the big number is their sum, so name both.
+        let streams = slots.filter { $0.state == .decoding && $0.isProcessing == true }
+
         var pill = status.text
         if case .generating = status {
-            pill = "Generating · \(Self.capitalized(live?.phase))"
+            if streams.count > 1 {
+                pill = "Generating · \(streams.count) streams"
+            } else if live?.phase?.isEmpty == false {
+                pill = "Generating · \(Self.capitalized(live?.phase))"
+            } else {
+                pill = "Generating"   // Basalt names no phase; "Generating · Generating" says nothing
+            }
         }
         // The backoff gave up: say so, and how to get it going again.
         if paused { pill = "Paused · click to retry" }
@@ -48,7 +58,9 @@ public struct HoverCard: Sendable, Equatable {
         let decodeValue = generating ? live?.tokS : last?.decodeTokS
         let decode = Speed(
             text: fmt(decodeValue, 1, locale: locale),
-            caption: generating ? "now" : (last != nil ? "last request" : "")
+            caption: generating
+                ? (streams.count > 1 ? streams.map { fmt($0.tokS, 0, locale: locale) }.joined(separator: " + ") : "now")
+                : (last != nil ? "last request" : "")
         )
 
         // Prefill: the web page's own branch — the engine's mean whenever the state is not idle,

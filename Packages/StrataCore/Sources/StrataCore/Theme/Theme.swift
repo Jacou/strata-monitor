@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// The "Mission control" palette: dark-first, glowing cyan.
+/// The "Mission control" palette: dark-first, glowing cyan for Strata, ember orange for Basalt.
 ///
 /// Every colour the app draws comes from here — the hex literals in this file are the only ones
 /// in the project. A `Theme` is resolved once per colour scheme and injected through
-/// `@Environment(\.theme)`, so views never branch on light/dark themselves.
+/// `@Environment(\.theme)`, so views never branch on light/dark — or on the engine — themselves.
 public struct Theme: Sendable, Equatable {
     public let scheme: ColorScheme
 
@@ -127,32 +127,69 @@ public struct Theme: Sendable, Equatable {
     public var badgeFont: Font { .system(size: 11, weight: .medium) }
     public var gaugeFont: Font { .system(size: 22, weight: .semibold, design: .monospaced) }
 
-    public init(scheme: ColorScheme) {
+    /// Which server the palette brands: Strata's glowing cyan, or Basalt's ember orange.
+    public let engine: ServerEngine
+
+    public init(scheme: ColorScheme, engine: ServerEngine = .strata) {
         let dark = scheme == .dark
         self.scheme = scheme
-        self.raw = Raw(
-            background: dark ? 0x070B14 : 0xF3F6FB,
-            headerGlow: dark ? 0x1FB8DD : 0x0A8FB5,
-            headerGlowAlpha: dark ? 0.22 : 0.12,
-            cardTop: dark ? 0x121B2E : 0xFFFFFF,
-            cardBottom: dark ? 0x0B111F : 0xFFFFFF,
-            cardOpacity: dark ? 0.92 : 1,
-            cardBorder: dark ? 0x4FE3FF : 0x0A8FB5,
-            cardBorderAlpha: dark ? 0.14 : 0.16,
-            cardHighlightAlpha: dark ? 0.04 : 0.03,
-            textPrimary: dark ? 0xE6EDF7 : 0x0E1726,
-            textSecondary: dark ? 0x8FA3BF : 0x5B6B82,
-            // The table says #7B8AA0; that is 3.2:1 on the light background, so light tertiary
-            // is the same hue pushed to 4.8:1. Dark keeps the table value (4.8:1 on a card).
-            textTertiary: dark ? 0x6E82A0 : 0x5E6D82,
-            accent: dark ? 0x4FE3FF : 0x0A8FB5,
-            accentDim: dark ? 0x1FB8DD : 0x0B7A9C,
-            warn: dark ? 0xFFB454 : 0xC77A14,
-            danger: dark ? 0xFF5C7A : 0xC8324F,
-            track: dark ? 0x162034 : 0xE3E9F2,
-            separatorBase: dark ? 0xFFFFFF : 0x000000,
-            separatorAlpha: dark ? 0.06 : 0.07
-        )
+        self.engine = engine
+        let text: (accent: UInt32, warn: UInt32, danger: UInt32)
+        switch engine {
+        case .strata:
+            self.raw = Raw(
+                background: dark ? 0x070B14 : 0xF3F6FB,
+                headerGlow: dark ? 0x1FB8DD : 0x0A8FB5,
+                headerGlowAlpha: dark ? 0.22 : 0.12,
+                cardTop: dark ? 0x121B2E : 0xFFFFFF,
+                cardBottom: dark ? 0x0B111F : 0xFFFFFF,
+                cardOpacity: dark ? 0.92 : 1,
+                cardBorder: dark ? 0x4FE3FF : 0x0A8FB5,
+                cardBorderAlpha: dark ? 0.14 : 0.16,
+                cardHighlightAlpha: dark ? 0.04 : 0.03,
+                textPrimary: dark ? 0xE6EDF7 : 0x0E1726,
+                textSecondary: dark ? 0x8FA3BF : 0x5B6B82,
+                // The table says #7B8AA0; that is 3.2:1 on the light background, so light tertiary
+                // is the same hue pushed to 4.8:1. Dark keeps the table value (4.8:1 on a card).
+                textTertiary: dark ? 0x6E82A0 : 0x5E6D82,
+                accent: dark ? 0x4FE3FF : 0x0A8FB5,
+                accentDim: dark ? 0x1FB8DD : 0x0B7A9C,
+                warn: dark ? 0xFFB454 : 0xC77A14,
+                danger: dark ? 0xFF5C7A : 0xC8324F,
+                track: dark ? 0x162034 : 0xE3E9F2,
+                separatorBase: dark ? 0xFFFFFF : 0x000000,
+                separatorAlpha: dark ? 0.06 : 0.07
+            )
+            // #C8324F already clears 4.5:1 in light.
+            text = dark ? (0x4FE3FF, 0xFFB454, 0xFF5C7A) : (0x0A6E8C, 0x9A570A, 0xC8324F)
+        case .basalt:
+            // Basalt's web page (web/app.css): basalt greys, ember accent, a yellow warn so a
+            // warning never reads as the accent. The page is dark only; light is the same hues on
+            // a warm off-white. Dark cards sit a step darker than the page's #1A2128 surface, and
+            // its #D93A5B error is brightened, so tertiary and danger text clear 4.5:1 on them.
+            self.raw = Raw(
+                background: dark ? 0x0E1114 : 0xF6F4F2,
+                headerGlow: 0xF2662B,
+                headerGlowAlpha: dark ? 0.16 : 0.10,
+                cardTop: dark ? 0x171D23 : 0xFFFFFF,
+                cardBottom: dark ? 0x12161A : 0xFFFFFF,
+                cardOpacity: dark ? 0.92 : 1,
+                cardBorder: dark ? 0xFF7A3D : 0xD9531F,
+                cardBorderAlpha: dark ? 0.12 : 0.16,
+                cardHighlightAlpha: dark ? 0.04 : 0.03,
+                textPrimary: dark ? 0xE9ECEE : 0x14181C,
+                textSecondary: dark ? 0x9AA4AD : 0x56616C,
+                textTertiary: dark ? 0x808B95 : 0x5E6872,
+                accent: dark ? 0xFF7A3D : 0xE8601F,
+                accentDim: 0xB8401A,
+                warn: dark ? 0xE9C341 : 0xC29A12,
+                danger: dark ? 0xF25F7E : 0xC8324F,
+                track: dark ? 0x222A32 : 0xECE7E3,
+                separatorBase: dark ? 0xFFFFFF : 0x000000,
+                separatorAlpha: dark ? 0.06 : 0.07
+            )
+            text = dark ? (0xFF7A3D, 0xE9C341, 0xF25F7E) : (0xB0400F, 0x7F6400, 0xC8324F)
+        }
 
         self.background = Color(hex: raw.background)
         self.headerGlow = Color(hex: raw.headerGlow, alpha: raw.headerGlowAlpha)
@@ -165,12 +202,12 @@ public struct Theme: Sendable, Equatable {
         self.accentDim = Color(hex: raw.accentDim)
         self.warn = Color(hex: raw.warn)
         self.danger = Color(hex: raw.danger)
-        self.accentText = Color(hex: dark ? raw.accent : 0x0A6E8C)
-        self.warnText = Color(hex: dark ? raw.warn : 0x9A570A)
-        self.dangerText = Color(hex: raw.danger)   // #C8324F already clears 4.5:1 in light
-        self.rawAccentText = dark ? raw.accent : 0x0A6E8C
-        self.rawWarnText = dark ? raw.warn : 0x9A570A
-        self.rawDangerText = raw.danger
+        self.accentText = Color(hex: text.accent)
+        self.warnText = Color(hex: text.warn)
+        self.dangerText = Color(hex: text.danger)
+        self.rawAccentText = text.accent
+        self.rawWarnText = text.warn
+        self.rawDangerText = text.danger
         self.track = Color(hex: raw.track)
         self.separator = Color(hex: raw.separatorBase, alpha: raw.separatorAlpha)
     }
@@ -194,17 +231,20 @@ extension EnvironmentValues {
 }
 
 extension View {
-    /// Resolves the palette once, at the root, from the system colour scheme.
-    public func strataTheme() -> some View {
-        modifier(StrataThemeModifier())
+    /// Resolves the palette once, at the root, from the system colour scheme and the engine of the
+    /// server on screen. `engine` is read while the modifier draws, so an observable model's
+    /// engine repaints the screen when the server turns out to be Basalt.
+    public func strataTheme(engine: @escaping @MainActor () -> ServerEngine = { .strata }) -> some View {
+        modifier(StrataThemeModifier(engine: engine))
     }
 }
 
 private struct StrataThemeModifier: ViewModifier {
+    let engine: @MainActor () -> ServerEngine
     @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
-        content.environment(\.theme, Theme(scheme: colorScheme))
+        content.environment(\.theme, Theme(scheme: colorScheme, engine: engine()))
     }
 }
 

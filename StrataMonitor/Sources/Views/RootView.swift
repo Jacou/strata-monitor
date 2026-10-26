@@ -1,7 +1,7 @@
 import SwiftUI
 import StrataCore
 
-/// The five tabs.
+/// The five tabs (four on a server with no run config).
 public enum AppTab: String, CaseIterable, Identifiable, Sendable {
     case monitor
     case chat
@@ -66,9 +66,12 @@ public struct RootView: View {
                 .tabItem { Label(AppTab.chat.label, systemImage: AppTab.chat.systemImage) }
                 .tag(AppTab.chat)
 
-            ConfigView()
-                .tabItem { Label(AppTab.config.label, systemImage: AppTab.config.systemImage) }
-                .tag(AppTab.config)
+            // Basalt has no run config to edit, so its tab goes while one is on screen.
+            if poller.engine.hasRunConfig {
+                ConfigView()
+                    .tabItem { Label(AppTab.config.label, systemImage: AppTab.config.systemImage) }
+                    .tag(AppTab.config)
+            }
 
             AboutView()
                 .tabItem { Label(AppTab.about.label, systemImage: AppTab.about.systemImage) }
@@ -78,9 +81,12 @@ public struct RootView: View {
                 .tabItem { Label(AppTab.settings.label, systemImage: AppTab.settings.systemImage) }
                 .tag(AppTab.settings)
         }
-        .tint(Theme(scheme: colorScheme).accent)
+        .tint(Theme(scheme: colorScheme, engine: poller.engine).accent)
         .minimizesTabBarOnScroll()
         // The server dropdown on any tab: the poller follows, and drops what the last server said.
+        .onChange(of: poller.engine) { _, engine in
+            if tab == .config, !engine.hasRunConfig { tab = .monitor }
+        }
         .onChange(of: settings.selectedSlot) { _, _ in
             poller.switchServer(to: settings.makeClient() ?? StrataClient(baseURL: AppSettings.defaultBaseURL))
         }

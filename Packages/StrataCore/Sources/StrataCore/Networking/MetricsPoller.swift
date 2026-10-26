@@ -65,6 +65,8 @@ public final class MetricsPoller {
     /// The `metrics?requests=all` payload fetched for the trends card. It is deliberately kept
     /// apart from the 1 s poll: the card only needs a fresh series every 30 s.
     public private(set) var trendRequests: [Request] = []
+    /// Basalt with more than one slot: `GET /slots` from the same tick, empty otherwise.
+    public private(set) var slots: [Slot] = []
     public private(set) var trendsUpdated: Date?
 
     /// False while `scenePhase != .active` (iOS) or the Mac is asleep / locked: the loop is stopped.
@@ -83,6 +85,8 @@ public final class MetricsPoller {
     private let healthEveryPolls = 10
     private var polls = 0
     private var task: Task<Void, Never>?
+    /// The series the server does not keep itself (Basalt keeps only the two speeds), sampled here.
+    private var sampled = SampledHistory()
 
     public init(client: StrataClient, interval: TimeInterval = 1, backoff: BackoffPolicy? = nil) {
         self.client = client
@@ -157,11 +161,27 @@ public final class MetricsPoller {
         }
     }
 
+    /// Which engine answers, from the last `/health`. Until one comes in, the engine this address
+    /// named last time, so a Basalt server opens in its own colours instead of flashing Strata's.
+    public var engine: ServerEngine {
+        health?.engine ?? Self.rememberedEngine(for: client.baseURL)
+    }
+
+    static func rememberedEngine(for baseURL: URL) -> ServerEngine {
+        UserDefaults.standard.string(forKey: engineKey(baseURL)).flatMap(ServerEngine.init(rawValue:)) ?? .strata
+    }
+
+    private static func engineKey(_ baseURL: URL) -> String {
+        "poller.engine.\(baseURL.absoluteString)"
+    }
+
     /// Settings changed: point at the new server / key and poll again at once.
     public func update(client: StrataClient) {
         self.client = client
         status = .unknown
         health = nil
+        slots = []
+        sampled = SampledHistory()
         polls = 0
         resume()
     }
@@ -191,7 +211,15 @@ public final class MetricsPoller {
     public func pollOnce() async {
         guard isActive, !isPaused else { return }
         do {
-            let fetched = try await client.metrics(allRequests: false)
+            var fetched = try await client.metrics(allRequests: false)
+            sampled.record(fetched.hardware)
+            fetched.history = sampled.filling(fetched.history)
+            // The per-slot rows come from their own endpoint; one failing must not fail the tick.
+            if fetched.live?.isMultiSlot == true {
+                slots = (try? await client.slots()) ?? slots
+            } else {
+                slots = []
+            }
             metrics = fetched
             consecutiveFailures = 0
             attemptsAtMax = 0
@@ -214,6 +242,7 @@ public final class MetricsPoller {
     private func pollHealth() async {
         guard let health = try? await client.health() else { return }
         self.health = health
+        UserDefaults.standard.set(health.engine.rawValue, forKey: Self.engineKey(client.baseURL))
     }
 
     private func record(_ error: StrataError) {
@@ -267,5 +296,51 @@ public final class MetricsPoller {
         case .idle, .other, .none:
             return .idle
         }
+    }
+}
+
+/// A rolling sample of the hardware series, one point per poll, for the sparklines a server does
+/// not keep a history of. A series the server does send always wins.
+struct SampledHistory: Sendable, Equatable {
+    static let capacity = 60
+
+    private(set) var gpuUtil: [Double] = []
+    private(set) var gpuMemUsed: [Double] = []
+    private(set) var gpuTemp: [Double] = []
+    private(set) var gpuPower: [Double] = []
+    private(set) var gpuPcieRxMb: [Double] = []
+    private(set) var cpu: [Double] = []
+    private(set) var ramUsed: [Double] = []
+    private(set) var diskReadMb: [Double] = []
+
+    mutating func record(_ hw: Hardware?) {
+        func push(_ series: inout [Double], _ value: Double?) {
+            series.append(value ?? 0)   // a gap draws as 0, like the server's own nulls
+            if series.count > Self.capacity { series.removeFirst(series.count - Self.capacity) }
+        }
+        push(&gpuUtil, hw?.gpuUtil)
+        push(&gpuMemUsed, hw?.gpuMemUsed)
+        push(&gpuTemp, hw?.gpuTemp)
+        push(&gpuPower, hw?.gpuPower)
+        push(&gpuPcieRxMb, hw?.gpuPcieRxMb)
+        push(&cpu, hw?.cpu)
+        push(&ramUsed, hw?.ramUsed)
+        push(&diskReadMb, hw?.diskReadMb)
+    }
+
+    func filling(_ history: History?) -> History {
+        var out = history ?? History()
+        func fill(_ keyPath: WritableKeyPath<History, [Double]?>, _ series: [Double]) {
+            if out[keyPath: keyPath]?.isEmpty ?? true { out[keyPath: keyPath] = series }
+        }
+        fill(\.gpuUtil, gpuUtil)
+        fill(\.gpuMemUsed, gpuMemUsed)
+        fill(\.gpuTemp, gpuTemp)
+        fill(\.gpuPower, gpuPower)
+        fill(\.gpuPcieRxMb, gpuPcieRxMb)
+        fill(\.cpu, cpu)
+        fill(\.ramUsed, ramUsed)
+        fill(\.diskReadMb, diskReadMb)
+        return out
     }
 }

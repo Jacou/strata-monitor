@@ -1,0 +1,32 @@
+[
+    {
+        "id": 0,
+        "n_ctx": 262144,
+        "is_processing": true,
+        "state": "decoding",
+        "api": "openai",
+        "model": "qwen3.8-flash-next-basalt-nvfp4",
+        "tok_s": 39.5,
+        "generated": 5023,
+        "prompt_tokens": 82433,
+        "prefill_done": 82433,
+        "ctx_used": 87456,
+        "drafts_offered": 335,
+        "drafts_accepted": 244
+    },
+    {
+        "id": 1,
+        "n_ctx": 262144,
+        "is_processing": true,
+        "state": "decoding",
+        "api": "openai",
+        "model": "qwen3.8-flash-next-basalt-nvfp4",
+        "tok_s": 39.5,
+        "generated": 594,
+        "prompt_tokens": 176454,
+        "prefill_done": 176454,
+        "ctx_used": 177048,
+        "drafts_offered": 574,
+        "drafts_accepted": 437
+    }
+]

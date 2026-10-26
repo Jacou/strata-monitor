@@ -126,15 +126,17 @@ final class ServerMonitorModel {
     var lastUpdated: Date? { poller?.lastUpdated }
     var baseURL: URL? { settings.baseURL(for: slot) }
     var modelName: String? { metrics?.engine?.model ?? health?.model }
+    var engine: ServerEngine { poller?.engine ?? .strata }
+    var slots: [Slot] { poller?.slots ?? [] }
 
     /// The Monitor's derivations, reused whole by the popover.
     var monitor: MonitorViewModel? {
-        metrics.map { MonitorViewModel(metrics: $0, modelLoaded: health?.loaded) }
+        metrics.map { MonitorViewModel(metrics: $0, modelLoaded: health?.loaded, slots: slots) }
     }
 
     /// The hover card's own, smaller derivation.
     var hoverCard: HoverCard {
-        HoverCard(metrics: metrics, status: status, model: modelName, lastUpdated: lastUpdated, paused: isPaused)
+        HoverCard(metrics: metrics, status: status, model: modelName, lastUpdated: lastUpdated, paused: isPaused, slots: slots)
     }
 
     /// 1 s while the hover card or the full popover is open, the chosen cadence otherwise. No scene

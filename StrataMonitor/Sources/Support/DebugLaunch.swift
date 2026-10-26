@@ -36,6 +36,9 @@ enum DebugLaunch {
         return parts.count > 1 ? String(parts[1]) : nil
     }
 
+    /// `--open-logs` opens a Basalt server's log once `/health` has said it is one.
+    static let opensLogs = ProcessInfo.processInfo.arguments.contains("--open-logs")
+
     /// `--select-trend` picks the newest charted request, which is what a tap on the chart does.
     static let selectsTrendPoint = ProcessInfo.processInfo.arguments.contains("--select-trend")
 

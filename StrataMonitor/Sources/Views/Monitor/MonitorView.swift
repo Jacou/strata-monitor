@@ -16,6 +16,7 @@ public struct MonitorView: View {
     /// the view keeps drawing the payload it had when the scroll began.
     @State private var isScrolling = false
     @State private var frozenMetrics: Metrics?
+    @State private var showsLogs = false
 
     public init() {}
 
@@ -28,7 +29,8 @@ public struct MonitorView: View {
                         now: .now,
                         allRequests: poller.allRequests,
                         fullRequests: poller.trendRequests,
-                        modelLoaded: poller.health?.loaded
+                        modelLoaded: poller.health?.loaded,
+                        slots: poller.slots
                     )
                     // Measured on the viewport, not on the capped content, so the column
                     // count cannot feed back on itself.
@@ -46,6 +48,15 @@ public struct MonitorView: View {
                             header
 
                             LiveStateCard(card: model.live)
+
+                            // Basalt runs requests side by side: what waits, then each slot.
+                            if let queue = model.queue {
+                                QueueCardView(card: queue)
+                            }
+                            if let slots = model.slots {
+                                SlotsCardView(card: slots)
+                                    .id("slots")
+                            }
 
                             // Tiles stretch to their row's height (see MetricTileView), so neighbours align.
                             LazyVGrid(columns: layout.gridColumns, spacing: MonitorLayout.gridSpacing) {
@@ -84,6 +95,13 @@ public struct MonitorView: View {
                                 }
                             }
 
+                            // Basalt's split of the last request's expert lookups. Strata's PCIe share
+                            // means something else, so the card is Basalt's alone.
+                            if poller.engine == .basalt, let sources = model.expertSources {
+                                ExpertSourcesCardView(sources: sources)
+                                    .id("experts")
+                            }
+
                             // Trends need at least three requests to be worth a card.
                             if !trends.isHidden {
                                 TrendsCard(
@@ -113,6 +131,12 @@ public struct MonitorView: View {
                                 SessionCard(session: session)
                                     .id("session")
                             }
+
+                            if poller.engine.hasLogs {
+                                Button { showsLogs = true } label: { LogsLinkCard() }
+                                    .buttonStyle(.plain)
+                                    .id("logs")
+                            }
                         }
                         .padding()
                         .padding(.bottom, 16)   // the last card must clear the tab bar
@@ -133,11 +157,20 @@ public struct MonitorView: View {
                     }
                     #if DEBUG
                     .onAppear {
+                        DebugLaunch.scroll(proxy, to: "slots", anchor: .center, after: 3)   // Basalt cards wait for /health
                         DebugLaunch.scroll(proxy, to: "resources", anchor: .center)
+                        DebugLaunch.scroll(proxy, to: "experts", anchor: .center, after: 3)
                         DebugLaunch.scroll(proxy, to: "cache", anchor: .center)
                         DebugLaunch.scroll(proxy, to: "trends", anchor: .center)
                         DebugLaunch.scroll(proxy, to: "session", anchor: .center)
                         DebugLaunch.scroll(proxy, to: "bottom", anchor: .bottom)
+                        if DebugLaunch.opensLogs {
+                            DebugLaunch.retryUntilOpened {
+                                guard poller.engine.hasLogs else { return false }
+                                showsLogs = true
+                                return true
+                            }
+                        }
                         if DebugLaunch.opensRequestSheet {
                             // simctl cannot tap a row, so `--open-request` opens the newest one
                             // once the first poll has brought a request in.
@@ -179,6 +212,7 @@ public struct MonitorView: View {
             // The title is drawn by ScreenTitle, so the theme controls its type.
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { await poller.pollOnce() }
+            .navigationDestination(isPresented: $showsLogs) { LogsView() }
             .onScrollPhaseChange { _, phase in
                 let scrolling = phase != .idle
                 if scrolling, !isScrolling { frozenMetrics = poller.metrics }

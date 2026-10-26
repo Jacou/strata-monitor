@@ -162,6 +162,12 @@ public struct MonitorViewModel: Sendable, Equatable {
     public var noRequestsText: String?
     /// nil when the server has not counted a request yet — the card is hidden.
     public var session: Session?
+    /// Basalt with more than one slot: a row per slot. nil otherwise — the card is hidden.
+    public var slots: SlotsCard?
+    /// Requests waiting for a free slot. nil while nothing waits — the card is hidden.
+    public var queue: QueueCard?
+    /// Where the last request's expert lookups were served from. nil when it did not say.
+    public var expertSources: ExpertSources?
     /// "Show all (224)", or nil when everything kept is already on screen.
     public var showAllLabel: String?
     /// The button while showing all: "Show fewer", or "Show fewer · newest 100 of 500" when capped.
@@ -176,7 +182,8 @@ public struct MonitorViewModel: Sendable, Equatable {
         locale: Locale = .autoupdatingCurrent,
         allRequests: Bool = false,
         fullRequests: [Request]? = nil,
-        modelLoaded: Bool? = nil
+        modelLoaded: Bool? = nil,
+        slots: [Slot] = []
     ) {
         let live = metrics.live
         let hw = metrics.hardware
@@ -192,11 +199,17 @@ public struct MonitorViewModel: Sendable, Equatable {
             : all
         let shown = allRequests ? Array(pool.prefix(Self.maxShownRequests)) : Array(all.prefix(12))
 
-        self.live = Self.liveCard(live: live, last: last, modelLoaded: modelLoaded, locale: locale)
+        // Several slots: `live.state` follows one request, so a second one decoding while the
+        // first reads its prompt must come from the slots themselves.
+        let busy = live?.isMultiSlot == true ? slots.filter { $0.isProcessing == true } : []
+        self.live = Self.liveCard(live: live, last: last, modelLoaded: modelLoaded, busy: busy, locale: locale)
         self.metrics = Self.metricTiles(
-            live: live, hw: hw, st: st, eng: eng, history: history, last: last, locale: locale
+            live: live, hw: hw, st: st, eng: eng, history: history, last: last, busy: busy, locale: locale
         )
-        self.context = Self.contextInfo(live: live, eng: eng, last: last, locale: locale)
+        self.context = Self.contextInfo(live: live, eng: eng, last: last, slots: slots, locale: locale)
+        self.slots = Self.slotsCard(live: live, slots: slots, locale: locale)
+        self.queue = Self.queueCard(live: live, locale: locale)
+        self.expertSources = Self.expertSources(last, locale: locale)
         self.experts = Self.expertBar(eng: eng, hw: hw, locale: locale)
         self.ram = Self.ramBar(hw: hw, locale: locale)
         self.temp = Self.tempBar(hw: hw, locale: locale)
@@ -213,7 +226,18 @@ public struct MonitorViewModel: Sendable, Equatable {
 
     // MARK: - live card
 
-    private static func liveCard(live: Live?, last: Request?, modelLoaded: Bool?, locale: Locale) -> LiveCard {
+    private static func liveCard(live: Live?, last: Request?, modelLoaded: Bool?, busy: [Slot], locale: Locale) -> LiveCard {
+        if busy.count > 1 {
+            let decoding = busy.filter { $0.state == .decoding }
+            let reading = busy.filter { $0.state == .prefill }.count
+            var parts: [String] = []
+            if !decoding.isEmpty { parts.append("\(decoding.count) decoding") }
+            if reading > 0 { parts.append("\(reading) reading a prompt") }
+            if !decoding.isEmpty {
+                parts.append("\(fmt(decoding.compactMap(\.tokS).reduce(0, +), 1, locale: locale)) tok/s total")
+            }
+            return LiveCard(label: "\(busy.count) requests running", detail: parts.joined(separator: " · "), percent: 0, tone: .normal)
+        }
         switch live?.state {
         case .reading:
             let total = live?.promptTotal ?? 0
@@ -238,9 +262,11 @@ public struct MonitorViewModel: Sendable, Equatable {
             let label = phase.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "Generating"
             let maxTokens = live?.maxTokens ?? 0
             let percent = maxTokens > 0 ? min(100, (100 * (live?.generated ?? 0)) / maxTokens) : 0
+            // Basalt sends no max_tokens, so there is no end to measure against: say how long instead.
+            let elapsed = maxTokens > 0 ? "" : (live?.elapsedS).map { " · \(fmt($0, 0, locale: locale)) s" } ?? ""
             return LiveCard(
                 label: label,
-                detail: "\(fmt(live?.generated, 0, locale: locale)) tokens · \(fmt(live?.tokS, 1, locale: locale)) tok/s",
+                detail: "\(fmt(live?.generated, 0, locale: locale)) tokens · \(fmt(live?.tokS, 1, locale: locale)) tok/s\(elapsed)",
                 percent: percent,
                 tone: .normal
             )
@@ -270,7 +296,8 @@ public struct MonitorViewModel: Sendable, Equatable {
     // MARK: - metric tiles
 
     private static func metricTiles(
-        live: Live?, hw: Hardware?, st: HardwareStatic?, eng: Engine?, history: History?, last: Request?, locale: Locale
+        live: Live?, hw: Hardware?, st: HardwareStatic?, eng: Engine?, history: History?, last: Request?, busy: [Slot],
+        locale: Locale
     ) -> [Metric] {
         let gpus = hw?.gpus ?? []
         let multi = gpus.count > 1
@@ -279,9 +306,14 @@ public struct MonitorViewModel: Sendable, Equatable {
         }
 
         // Speed: decode now / last request, plus prefill
-        let generating = live?.state == .generating
-        let speed = generating ? live?.tokS : last?.decodeTokS
-        let speedSub = generating ? "Decode now" : (last != nil ? "Decode last request" : "Decode")
+        let streams = busy.filter { $0.state == .decoding }
+        let generating = live?.state == .generating || !streams.isEmpty
+        let speed = streams.count > 1 || (!streams.isEmpty && live?.state != .generating)
+            ? streams.compactMap(\.tokS).reduce(0, +)
+            : (generating ? live?.tokS : last?.decodeTokS)
+        let speedSub = generating
+            ? (streams.count > 1 ? "Decode, \(streams.count) streams total" : "Decode now")
+            : (last != nil ? "Decode last request" : "Decode")
         // Same branch as the web page: while not idle the engine reports the mean itself,
         // otherwise it is worked out from the last request's unread prompt tokens.
         let prefillValue: Double?
@@ -428,7 +460,18 @@ public struct MonitorViewModel: Sendable, Equatable {
 
     // MARK: - context ring, expert cache, RAM, temperature
 
-    private static func contextInfo(live: Live?, eng: Engine?, last: Request?, locale: Locale) -> Context {
+    private static func contextInfo(live: Live?, eng: Engine?, last: Request?, slots: [Slot], locale: Locale) -> Context {
+        // Several slots: each has its own window, so the ring shows the fullest one.
+        let busiest = slots.filter { $0.isProcessing == true }.max { ($0.ctxUsed ?? 0) < ($1.ctxUsed ?? 0) }
+        if let busiest, let used = busiest.ctxUsed, let max = busiest.nCtx ?? eng?.maxContext, max > 0 {
+            let fraction = min(1, used / max)
+            return Context(
+                percentText: "\(fmt(fraction * 100, 0, locale: locale))%",
+                sub: "\(kfmt(used, locale: locale)) / \(ctxfmt(max, locale: locale)) · slot \(busiest.id)",
+                fraction: fraction,
+                arcVisible: 235.6 * fraction >= 3
+            )
+        }
         let max = eng?.maxContext ?? 0
         var used = 0.0
         if live?.state != .idle {
@@ -587,6 +630,10 @@ public struct MonitorViewModel: Sendable, Equatable {
 
         var facts: [Fact] = [
             Fact(key: "Time", value: timeString(request.time, locale: locale)),
+        ]
+        if let requestID = request.requestID { facts.append(Fact(key: "ID", value: requestID)) }
+        if let path = request.path { facts.append(Fact(key: "Endpoint", value: path)) }
+        facts += [
             Fact(key: "Finish", value: finishText),
             Fact(key: "Duration", value: request.durationS.map { "\(fmt($0, 1, locale: locale)) s" } ?? notAvailable),
             Fact(key: "Prompt", value: fmt(prompt, 0, locale: locale)),

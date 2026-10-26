@@ -32,14 +32,18 @@ public struct AboutSection: Identifiable, Equatable, Sendable {
 /// the Monitor polls. Rows the server did not report are dropped, exactly like `facts()`.
 public struct AboutViewModel: Equatable, Sendable {
     public let sections: [AboutSection]
-    public let repositoryURL: URL
+    /// The engine's source, nil when it has no public repository to link to (Basalt).
+    public let repositoryURL: URL?
     /// True when the poller has not fetched anything yet.
     public let isEmpty: Bool
 
     public static let repository = "https://github.com/Niko1221/Strata"
 
-    public init(metrics: Metrics?, baseURL: URL?, locale: Locale = .autoupdatingCurrent) {
+    /// `health` fills in what `/metrics` leaves out on some engines (whether images are on) and
+    /// says which engine it is.
+    public init(metrics: Metrics?, baseURL: URL?, health: Health? = nil, locale: Locale = .autoupdatingCurrent) {
         let eng = metrics?.engine
+        let kind = health?.engine ?? .strata
         let hw = metrics?.hardware
         let st = metrics?.hardwareStatic
 
@@ -50,10 +54,14 @@ public struct AboutViewModel: Equatable, Sendable {
         if let model = eng?.model, !model.isEmpty {
             engine.append(AboutFact(label: "Model", value: model))
         }
-        engine.append(AboutFact(
-            label: "Engine",
-            value: eng?.version.map { $0.isEmpty ? "built from source" : "v\($0)" } ?? "built from source"
-        ))
+        let version = eng?.version.map { $0.isEmpty ? "built from source" : "v\($0)" } ?? "built from source"
+        engine.append(AboutFact(label: "Engine", value: kind == .basalt ? "Basalt \(version)" : version))
+        if let quant = eng?.quant, !quant.isEmpty {
+            engine.append(AboutFact(label: "Weights", value: quant))
+        }
+        if let slots = eng?.batchSlots, slots > 1 {
+            engine.append(AboutFact(label: "Parallel requests", value: "\(fmt(slots, 0, locale: locale)) slots"))
+        }
         if let maxContext = eng?.maxContext, maxContext > 0 {
             engine.append(AboutFact(label: "Context", value: "\(fmt(maxContext, 0, locale: locale)) tokens"))
         }
@@ -82,7 +90,7 @@ public struct AboutViewModel: Equatable, Sendable {
                 value: "MTP drafts up to \(fmt(drafts, 0, locale: locale)) tokens\(lookup)"
             ))
         }
-        engine.append(AboutFact(label: "Images", value: eng?.images == true ? "on" : "off"))
+        engine.append(AboutFact(label: "Images", value: (eng?.images ?? health?.images) == true ? "on" : "off"))
         if let projection = Self.projectionText(eng?.cvec) {
             engine.append(AboutFact(label: "Experimental speed projection", value: projection))
         }
@@ -103,6 +111,12 @@ public struct AboutViewModel: Equatable, Sendable {
         if let ram = hw?.ramTotal, ram != 0 {
             hardware.append(AboutFact(label: "RAM", value: "\(gb(ram, 0, locale: locale)) GB"))
         }
+        if let driver = st?.driver, !driver.isEmpty {
+            hardware.append(AboutFact(label: "NVIDIA driver", value: driver))
+        }
+        if let cuda = st?.cuda, !cuda.isEmpty {
+            hardware.append(AboutFact(label: "CUDA", value: cuda))
+        }
         sections.append(AboutSection(title: "Hardware", facts: hardware))
 
         // MARK: API — the endpoints this server answers, each copyable
@@ -117,7 +131,7 @@ public struct AboutViewModel: Equatable, Sendable {
         sections.append(AboutSection(title: "API", facts: api))
 
         self.sections = sections.filter { !$0.facts.isEmpty }
-        self.repositoryURL = URL(string: Self.repository)!
+        self.repositoryURL = kind == .strata ? URL(string: Self.repository) : nil
         self.isEmpty = metrics == nil
     }
 
@@ -151,7 +165,8 @@ public struct AboutViewModel: Equatable, Sendable {
     /// The server address without a trailing slash, so `<base>/v1` does not double up.
     static func baseString(_ url: URL?) -> String? {
         guard let url else { return nil }
-        guard let string = url.absoluteString.split(separator: "?", omittingEmptySubsequences: false).first.map(String.init) else { return nil }
+        // An address pasted from the web page can end in "#stats".
+        guard let string = url.absoluteString.split(whereSeparator: { $0 == "?" || $0 == "#" }).first.map(String.init) else { return nil }
         let trimmed = string.hasSuffix("/") ? String(string.dropLast()) : string
         return trimmed.isEmpty ? nil : trimmed
     }

@@ -204,7 +204,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     }
 
     private func labelRootView(showsText: Bool) -> AnyView {
-        AnyView(MenuBarStatusLabel(model: model, showsText: showsText).strataTheme())
+        AnyView(MenuBarStatusLabel(model: model, showsText: showsText).strataTheme { [model] in model.engine })
     }
 
     /// The item's width follows the label — the icon alone when idle, `104 t/s` when busy — except
@@ -335,7 +335,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             // The popover follows the SwiftUI content as it reflows (a longer pill, more request
             // rows): `preferredContentSize` is what NSPopover animates to.
             let controller = NSViewController()
-            let hosting = NSHostingView(rootView: MenuBarPopover(model: model).strataTheme()
+            let hosting = NSHostingView(rootView: MenuBarPopover(model: model).strataTheme { [model] in model.engine }
                 .onGeometryChange(for: CGSize.self, of: { $0.size }) { [weak controller] size in
                     guard size.width > 0, size.height > 0 else { return }
                     controller?.preferredContentSize = size
@@ -425,7 +425,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         // the SwiftUI content reports its new size and the popover follows at once, instead of
         // keeping the size it opened with.
         let controller = NSViewController()
-        let hosting = PassthroughHostingView(rootView: AnyView(HoverCardView(model: model).strataTheme()
+        let hosting = PassthroughHostingView(rootView: AnyView(HoverCardView(model: model).strataTheme { [model] in model.engine }
             .onGeometryChange(for: CGSize.self, of: { $0.size }) { [weak controller] size in
                 guard size.width > 0, size.height > 0 else { return }
                 controller?.preferredContentSize = size
