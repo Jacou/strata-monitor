@@ -85,6 +85,12 @@ side by side, content capped at 1200 pt. A narrow Split View falls back to the i
 
 ## Basalt servers
 
+<p align="center">
+  <img src="docs/screens/iphone-basalt-monitor-dark.png" width="230" alt="Monitor on a Basalt server: two requests decoding side by side, iPhone">
+  &nbsp;
+  <img src="docs/screens/iphone-basalt-about-light.png" width="230" alt="About on a Basalt server, iPhone, light">
+</p>
+
 Basalt answers the same `/health`, `/metrics` and `/v1` endpoints with the same API key, so it is
 the same app. `/health` says `"service": "basalt"`, and the apps adapt:
 
