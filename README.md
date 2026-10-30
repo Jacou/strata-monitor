@@ -1,16 +1,17 @@
 # Strata Monitor
 
-Native apps for watching a [Strata](https://github.com/Niko1221/Strata) LLM server from your
-other screens: an **iPhone / iPad app** and a **macOS menu bar app**, both built on one shared
-Swift package. They read the same endpoints as Strata's own web Monitor, once a second, so what you
+Native apps for watching a [Strata](https://github.com/Niko1221/Strata) or Basalt LLM server
+from your other screens: an **iPhone / iPad app** and a **macOS menu bar app**, both built on one shared
+Swift package. They read the same endpoints as the server's own web Monitor, once a second, so what you
 see is live: engine state, decode and prefill speed, GPU load, VRAM, temperature, power, PCIe,
 the expert and conversation caches, every recent request, and the trends across them.
 
 - **iOS / iPadOS** — Monitor, Chat, Config, About, Settings tabs.
 - **macOS** — a menu bar item that shows the live speed, a hover card at a glance, a full popover
   on click.
-- **Basalt too** — point it at a Basalt server and the apps notice (from `/health`) and adapt;
-  see [Basalt servers](#basalt-servers).
+- **Strata and Basalt** — point it at either engine and the apps notice (from `/health`) and
+  adapt: Basalt's slots, queue, expert sources and server log, in Basalt's ember orange; Strata
+  in its blue. See [Basalt servers](#basalt-servers).
 - No third-party packages. Swift 6, SwiftUI, iOS 18+ / macOS 15+.
 
 <p align="center">
