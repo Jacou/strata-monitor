@@ -40,10 +40,11 @@ the expert and conversation caches, every recent request, and the trends across 
 | **Chat** | Streaming client on `POST /v1/chat/completions`, mirroring the web page's defaults (thinking high, temperature 0.6, top_p 0.95, top_k 20). Thoughts fold under "Thought for N s", answers render as Markdown with code blocks, the meta line reads "201 tokens · 63.6 tok/s". Stop keeps what arrived. Last 20 conversations saved on the device. Text only. |
 | **Config** | `GET /config` as a grouped list with Strata's own help text; tap a key to edit it with the right control for its kind. Saves with `POST /config`, shows the server's own error if it refuses. |
 | **About** | Engine, hardware and API facts; the OpenAI and Anthropic base URLs copy to the pasteboard. |
-| **Settings** | Up to two servers, edited one at a time: name, address, API key (Keychain), Save, Test connection, Remove. |
+| **Settings** | One to four servers, edited one at a time: name, address, API key (Keychain), Save, Test connection, Remove; **+** adds a server. |
 
-**Two servers** — once a second server has an address, a dropdown beside each tab's title picks
-which one every tab shows. Each keeps its own name, address and Keychain entry.
+**Up to four servers** — one by default; add more in Settings. Once more than one has an address, a
+dropdown beside each tab's title picks which one every tab shows. Each keeps its own name, address
+and Keychain entry; removing one moves the later ones up.
 
 **Trends** chart Decode tok/s, Expert hit rate % or Prefill tok/s across the last 40 requests;
 tapping a point highlights its row in the list.
@@ -73,11 +74,11 @@ side by side, content capped at 1200 pt. A narrow Split View falls back to the i
   numbers are.
 - **Click** — the full popover: live state, the eight tiles, context gauge and bars, the last five
   requests, links to the Strata web page, Settings and Quit. **Right-click** — Settings and Quit.
-- **Two servers** — each configured server gets its own menu bar item, hover card and popover,
-  with the start of its name (or `1` / `2`) in front of the label so the two read apart. ⌘-drag
+- **Up to four servers** — each configured server gets its own menu bar item, hover card and popover,
+  with the start of its name (or its number) in front of the label so they read apart. ⌘-drag
   to reorder; the order sticks.
 - **Settings window** — per server: name, address, key (its own Keychain entry), Test connection,
-  Remove; then Launch at login and the idle refresh rate (5 / 15 / 30 s; 1 s while a card is open).
+  Remove, Add server; then Launch at login and the idle refresh rate (5 / 15 / 30 s; 1 s while a card is open).
 - **Polling** — one `GET /metrics` (~13 KB) per tick, `/health` every tenth. When the server stops
   answering the delay doubles (5 → 10 → 20 → 40 → 60 s); after three misses at 60 s it stops
   altogether and the card says "Paused · click to retry". A click, a wake from sleep, an unlock
@@ -173,7 +174,7 @@ tools/                    icon generator, mock server for states the live server
   the apps follow the system appearance. `ThemeTests` enforces WCAG AA contrast on every text pair.
 - **Lenient decoding** — every field of `/metrics` is optional, so a newer or older Strata still
   renders what it sends.
-- **Tests** — 374 across the package and the apps, driven by real server payloads in
+- **Tests** — 391 across the package and the apps, driven by real server payloads in
   `Packages/StrataCore/Tests/StrataCoreTests/Fixtures`. `swift test --package-path Packages/StrataCore`
   runs the shared ones on the Mac.
 
