@@ -3,8 +3,8 @@ import StrataCore
 import SwiftUI
 
 /// The Settings window: the same fields and the same connection test as the iOS Settings tab — one
-/// server at a time, each with its own menu bar item — plus "Launch at login" and how often to
-/// refresh while nothing is on screen.
+/// of the up-to-four servers at a time, each configured one with its own menu bar item — plus
+/// "Launch at login" and how often to refresh while nothing is on screen.
 struct MenuBarSettingsView: View {
     let model: MenuBarModel
 
@@ -30,7 +30,7 @@ struct MenuBarSettingsView: View {
         Form {
             Section {
                 Picker("Server", selection: $editingSlot) {
-                    ForEach(ServerSlot.allCases) { slot in
+                    ForEach(model.settings.slots) { slot in
                         Text(model.settings.displayName(for: slot)).tag(slot)
                     }
                 }
@@ -38,12 +38,18 @@ struct MenuBarSettingsView: View {
                 .labelsHidden()
                 .onChange(of: editingSlot) { _, _ in reloadServerDrafts() }
 
+                if model.settings.canAddServer {
+                    Button("Add server") { addServer() }
+                        .font(.footnote)
+                        .foregroundStyle(theme.accentText)
+                }
+
                 TextField("Name", text: $nameDraft, prompt: Text(editingSlot.defaultName))
                     .textFieldStyle(.roundedBorder)
 
-                Text(editingSlot == .secondary && !model.settings.isConfigured(.secondary)
-                     ? "Give a second server an address and it gets its own menu bar item."
-                     : "With two servers, the start of each name (or 1 / 2) sits in front of its menu bar item.")
+                Text(editingSlot != .primary && !model.settings.isConfigured(editingSlot)
+                     ? "Give this server an address and it gets its own menu bar item."
+                     : "With more than one server, the start of each name (or its number) sits in front of its menu bar item.")
                     .font(.footnote)
                     .foregroundStyle(theme.textSecondary)
             }
@@ -65,8 +71,10 @@ struct MenuBarSettingsView: View {
                     if editingSlot == .primary {
                         Button("Use the default") { urlDraft = AppSettings.defaultBaseURLString }
                             .disabled(urlDraft == AppSettings.defaultBaseURLString)
-                    } else if model.settings.isConfigured(.secondary) {
-                        Button("Remove \(model.settings.displayName(for: .secondary))…") { confirmRemove = true }
+                    }
+
+                    if model.settings.slots.count > 1 {
+                        Button("Remove \(model.settings.displayName(for: editingSlot))…") { confirmRemove = true }
                             .foregroundStyle(theme.dangerText)
                     }
                 }
@@ -149,11 +157,11 @@ struct MenuBarSettingsView: View {
         .frame(width: 460, height: 600)
         .background(ThemeBackground())
         .onAppear(perform: loadDrafts)
-        .confirmationDialog("Remove \(model.settings.displayName(for: .secondary))?",
+        .confirmationDialog("Remove \(model.settings.displayName(for: editingSlot))?",
                             isPresented: $confirmRemove) {
-            Button("Remove", role: .destructive) { removeSecondary() }
+            Button("Remove", role: .destructive) { removeEditingServer() }
         } message: {
-            Text("Its address, name and API key are forgotten, and its menu bar item goes away.")
+            Text("Its address, name and API key are forgotten, its menu bar item goes away, and the servers after it close the gap.")
         }
     }
 
@@ -180,7 +188,15 @@ struct MenuBarSettingsView: View {
         tester.reset()
     }
 
-    /// Saves the server being edited and the cadence; a newly set-up second server gets its item.
+    /// Make room for one more server and edit it straight away; its menu bar item arrives with the
+    /// save that gives it an address.
+    private func addServer() {
+        guard let slot = model.settings.addServer() else { return }
+        editingSlot = slot
+        reloadServerDrafts()
+    }
+
+    /// Saves the server being edited and the cadence; a newly set-up server gets its menu bar item.
     private func save() {
         guard canSave else { return }
         model.settings.setName(nameDraft, for: editingSlot)
@@ -192,10 +208,12 @@ struct MenuBarSettingsView: View {
         tester.reset()
     }
 
-    private func removeSecondary() {
-        model.settings.removeSecondary()
+    /// Drop the server being edited; the ones after it shift down a slot, and the last item goes away.
+    private func removeEditingServer() {
+        let removed = editingSlot
+        model.settings.removeServer(removed)
         model.reconnect()
-        editingSlot = .primary
+        editingSlot = ServerSlot(index: removed.index - 1) ?? .primary
         reloadServerDrafts()
     }
 

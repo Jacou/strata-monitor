@@ -19,7 +19,7 @@ struct StrataMenuBarApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = MenuBarModel()
-    /// One menu bar item per configured server.
+    /// One menu bar item per configured server, up to `AppSettings.maxServers`.
     private var controllers: [StatusItemController] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -27,8 +27,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         syncStatusItems()
     }
 
-    /// Add an item for a server that just got set up, drop the one for a server just removed.
-    /// macOS puts a new item to the left of the existing ones, so the primary is installed first.
+    /// Add an item for a server that just got set up, drop the item of a slot a removal emptied — the
+    /// servers that moved down into the kept slots stay on their items. macOS puts a new item to the
+    /// left of the existing ones, so the items are installed in slot order and the primary is first.
     private func syncStatusItems() {
         let servers = model.servers
         for controller in controllers where !servers.contains(where: { $0 === controller.server }) {
@@ -61,7 +62,7 @@ struct MenuBarStatusLabel: View {
         let text = showsText ? MenuBarLabel.text(for: status) : ""
 
         HStack(spacing: 5) {
-            // Which server, when there are two: on the left, so the icon keeps the right edge.
+            // Which server, when there is more than one: on the left, so the icon keeps the right edge.
             if let tag = model.tag, !tag.isEmpty {
                 Text(tag)
                     .foregroundStyle(.secondary)

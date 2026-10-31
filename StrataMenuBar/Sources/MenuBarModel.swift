@@ -23,7 +23,7 @@ final class MenuBarModel {
         #if DEBUG
         settings.adoptServerFromEnvironment()
         settings.adoptAPIKeyFromEnvironment()
-        settings.adoptSecondaryFromEnvironment()
+        settings.adoptExtraServersFromEnvironment()
         #endif
         reconnect()
         watchSleepAndLock()
@@ -98,13 +98,13 @@ final class ServerMonitorModel {
 
     var displayName: String { settings.displayName(for: slot) }
 
-    /// The few characters in front of the label that say which server this item is — only
-    /// once there are two to tell apart. An unnamed server is "1" / "2": "Server 1" and "Server 2"
-    /// would both cut down to "Server".
+    /// The few characters in front of the label that say which server this item is — only once
+    /// there is more than one to tell apart. An unnamed server is just its number: "Server 1" and
+    /// "Server 2" would both cut down to "Server".
     var tag: String? {
         guard settings.hasMultipleServers else { return nil }
         let name = settings.name(for: slot)
-        return name.isEmpty ? (slot == .primary ? "1" : "2") : MenuBarLabel.tag(for: name)
+        return name.isEmpty ? String(slot.number) : MenuBarLabel.tag(for: name)
     }
 
     /// The name to put on the cards, or nil with a single server (nothing to tell apart).

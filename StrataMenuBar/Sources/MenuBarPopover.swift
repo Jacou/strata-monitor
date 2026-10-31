@@ -162,7 +162,8 @@ struct MenuBarPopover: View {
         .strataCard(theme)
     }
 
-    /// "Mac Studio · qwen3.8-flash-next" when two servers share the menu bar, the model alone otherwise.
+    /// "Mac Studio · qwen3.8-flash-next" when more than one server shares the menu bar, the model
+    /// alone when it is the only one.
     private var footerTitle: String {
         [model.cardName, model.modelName].compactMap { $0 }.joined(separator: " · ").nonEmpty ?? model.engine.name
     }

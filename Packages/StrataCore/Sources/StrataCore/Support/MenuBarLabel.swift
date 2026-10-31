@@ -20,7 +20,7 @@ public enum MenuBarLabel {
     /// The longest tag in front of the label: room for "Studio" or "Mac", not a sentence.
     public static let tagLength = 6
 
-    /// The server's name cut to fit in front of the label when two servers share the menu bar:
+    /// The server's name cut to fit in front of the label when several servers share the menu bar:
     /// "Mac Studio" → "Mac St". No ellipsis — the cards spell the full name out.
     public static func tag(for name: String) -> String {
         String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(tagLength))
