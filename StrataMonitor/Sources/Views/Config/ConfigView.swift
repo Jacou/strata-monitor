@@ -88,7 +88,8 @@ public struct ConfigView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { await store.load(client: settings.makeClient()) }
             .refreshable { await store.load(client: settings.makeClient()) }
-            // The run config belongs to the server, so a new address or key — or the other server picked — means read it again.
+            // The run config belongs to the server, so a new address or key — or another server
+            // picked from the dropdown — means read it again.
             .onChange(of: settings.baseURLString) { _, _ in Task { await store.load(client: settings.makeClient()) } }
             .onChange(of: settings.apiKey) { _, _ in Task { await store.load(client: settings.makeClient()) } }
             .sheet(item: $editing) { key in

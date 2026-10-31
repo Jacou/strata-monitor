@@ -1,8 +1,8 @@
 import SwiftUI
 import StrataCore
 
-/// The server dropdown beside a screen title: which server every tab is showing. Draws
-/// nothing until a second server is set up in Settings.
+/// The server dropdown beside a screen title: which server every tab is showing. Draws nothing
+/// while there is only one, and truncates a long name rather than crowd the title out.
 public struct ServerPicker: View {
     @Environment(AppSettings.self) private var settings
     @Environment(\.theme) private var theme
@@ -29,6 +29,7 @@ public struct ServerPicker: View {
                 HStack(spacing: 4) {
                     Text(settings.displayName(for: selected))
                         .lineLimit(1)
+                        .truncationMode(.tail)
                     Image(systemName: "chevron.up.chevron.down")
                         .imageScale(.small)
                 }
@@ -55,7 +56,10 @@ public struct ScreenTitleRow: View {
         VStack(alignment: .leading, spacing: 2) {
             EngineBadge(engine: poller.engine)
             HStack(alignment: .center, spacing: 10) {
+                // A screen title is a short fixed word, so it keeps its full width and the
+                // dropdown gives up the rest of the row to it.
                 ScreenTitle(text)
+                    .fixedSize(horizontal: true, vertical: false)
                 ServerPicker()
             }
         }

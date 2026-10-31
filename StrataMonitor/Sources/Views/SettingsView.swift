@@ -22,7 +22,15 @@ public struct SettingsView: View {
     private var draftURL: URL? { AppSettings.validURL(urlDraft) }
     private var canSave: Bool { draftURL != nil }
     private var busy: Bool { tester.state == .testing }
-    private var editingShown: Bool { editingSlot == settings.selectedSlot }
+    private var editingShown: Bool { slot == settings.selectedSlot }
+
+    /// What `editingSlot` means while it still names a server the user keeps: after a removal the
+    /// old value can point past the end of the list, and the fields fall back to the primary.
+    private var slot: ServerSlot { settings.slots.contains(editingSlot) ? editingSlot : .primary }
+
+    private var slotBinding: Binding<ServerSlot> {
+        Binding(get: { slot }, set: { editingSlot = $0 })
+    }
 
     public var body: some View {
         NavigationStack {
@@ -34,22 +42,34 @@ public struct SettingsView: View {
                     .listRowSeparator(.hidden)
 
                 Section {
-                    Picker("Server", selection: $editingSlot) {
-                        ForEach(ServerSlot.allCases) { slot in
-                            Text(settings.displayName(for: slot)).tag(slot)
+                    HStack(spacing: 10) {
+                        Picker("Server", selection: slotBinding) {
+                            ForEach(settings.slots) { server in
+                                Text(settings.displayName(for: server))
+                                    .tag(server)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        if settings.canAddServer {
+                            Button(action: addServer) {
+                                Image(systemName: "plus")
+                            }
+                            .accessibilityLabel("Add server")
+                            .foregroundStyle(theme.accentText)
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .onChange(of: editingSlot) { _, _ in reloadDrafts() }
+                    .onChange(of: slot) { _, _ in reloadDrafts() }
                 } footer: {
-                    Text(editingSlot == .secondary && !settings.isConfigured(.secondary)
-                         ? "Give a second server an address to switch between the two from any tab."
-                         : "Edit one server at a time; the dropdown beside each title picks the one shown.")
+                    Text(settings.isConfigured(slot)
+                         ? "Edit one server at a time; the dropdown beside each title picks the one shown."
+                         : "Give this server an address and a key to pick it from the dropdown on any tab.")
                 }
                 .listRowBackground(Color.clear)
 
                 Section {
-                    TextField(editingSlot.defaultName, text: $nameDraft)
+                    TextField(slot.defaultName, text: $nameDraft)
                         .autocorrectionDisabled()
                         .foregroundStyle(theme.textPrimary)
                 } header: {
@@ -73,7 +93,7 @@ public struct SettingsView: View {
                             .foregroundStyle(theme.dangerText)
                     }
 
-                    if editingSlot == .primary {
+                    if slot == .primary {
                         Button("Use the default") { urlDraft = AppSettings.defaultBaseURLString }
                             .font(.footnote)
                             .foregroundStyle(theme.accentText)
@@ -146,20 +166,20 @@ public struct SettingsView: View {
                 }
 
                 Section("Saved") {
-                    LabeledContent("Name", value: settings.displayName(for: editingSlot))
+                    LabeledContent("Name", value: settings.displayName(for: slot))
                     LabeledContent("Address", value: savedAddressText)
-                    LabeledContent("API key", value: settings.hasAPIKey(for: editingSlot) ? "stored in the Keychain" : "not set")
+                    LabeledContent("API key", value: settings.hasAPIKey(for: slot) ? "stored in the Keychain" : "not set")
                 }
 
-                if editingSlot == .secondary, settings.isConfigured(.secondary) {
+                if settings.slots.count > 1 {
                     Section {
-                        Button("Remove \(settings.displayName(for: .secondary))", role: .destructive) {
+                        Button("Remove \(settings.displayName(for: slot))", role: .destructive) {
                             confirmRemove = true
                         }
                     }
-                    .confirmationDialog("Remove \(settings.displayName(for: .secondary))?",
+                    .confirmationDialog("Remove \(settings.displayName(for: slot))?",
                                         isPresented: $confirmRemove, titleVisibility: .visible) {
-                        Button("Remove", role: .destructive) { removeSecondary() }
+                        Button("Remove", role: .destructive) { removeServer() }
                     } message: {
                         Text("Its address, name and API key are forgotten.")
                     }
@@ -177,9 +197,9 @@ public struct SettingsView: View {
     // MARK: - actions
 
     private var savedAddressText: String {
-        let address = settings.baseURLString(for: editingSlot)
+        let address = settings.baseURLString(for: slot)
         if address.isEmpty { return "not set" }
-        return settings.baseURL(for: editingSlot) != nil ? address : "invalid — not used"
+        return settings.baseURL(for: slot) != nil ? address : "invalid — not used"
     }
 
     private func loadDrafts() {
@@ -190,28 +210,43 @@ public struct SettingsView: View {
     }
 
     private func reloadDrafts() {
-        nameDraft = settings.name(for: editingSlot)
-        urlDraft = settings.baseURLString(for: editingSlot)
-        keyDraft = settings.apiKey(for: editingSlot)
+        nameDraft = settings.name(for: slot)
+        urlDraft = settings.baseURLString(for: slot)
+        keyDraft = settings.apiKey(for: slot)
         tester.reset()
+    }
+
+    /// Make room for one more server and start editing it straight away.
+    private func addServer() {
+        guard let added = settings.addServer() else { return }
+        editingSlot = added
+        reloadDrafts()
     }
 
     private func save() {
         guard canSave else { return }
-        settings.setName(nameDraft, for: editingSlot)
-        settings.setBaseURLString(trimmed(urlDraft), for: editingSlot)
-        settings.setAPIKey(keyDraft, for: editingSlot)
-        nameDraft = settings.name(for: editingSlot)
+        settings.setName(nameDraft, for: slot)
+        settings.setBaseURLString(trimmed(urlDraft), for: slot)
+        settings.setAPIKey(keyDraft, for: slot)
+        nameDraft = settings.name(for: slot)
         if editingShown, let client = settings.makeClient() {
             poller.update(client: client)
         }
         tester.reset()
     }
 
-    /// The selection falls back to the primary server, and RootView moves the poller with it.
-    private func removeSecondary() {
-        settings.removeSecondary()
-        editingSlot = .primary
+    /// The servers after this one move down a slot and the selection follows them, so RootView
+    /// moves the poller with it. Editing carries on with the server before the one that went away.
+    private func removeServer() {
+        let removed = slot
+        let wasShown = removed == settings.selectedSlot
+        settings.removeServer(removed)
+        // The first server removed while on screen: the selection stays on slot 1, which now holds
+        // the next server, so RootView sees no change. Point the poller at it here.
+        if wasShown, settings.selectedSlot == removed {
+            poller.switchServer(to: settings.makeClient() ?? StrataClient(baseURL: AppSettings.defaultBaseURL))
+        }
+        editingSlot = ServerSlot(index: removed.index - 1) ?? .primary
         reloadDrafts()
     }
 
