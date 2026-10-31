@@ -240,7 +240,38 @@ final class AppSettingsTests: XCTestCase {
     }
     #endif
 
-    // MARK: - two servers
+    // MARK: - one to four servers
+
+    /// Four servers with an address, a name and a key each, so a move is easy to follow.
+    private func fill(_ settings: AppSettings) {
+        let servers = [
+            ("http://10.0.0.1:8081", "One", "k1"),
+            ("http://10.0.0.2:8081", "Two", "k2"),
+            ("http://10.0.0.3:8081", "Three", "k3"),
+            ("http://10.0.0.4:8081", "Four", "k4"),
+        ]
+        for slot in ServerSlot.allCases {
+            let server = servers[slot.index]
+            settings.setBaseURLString(server.0, for: slot)
+            settings.setName(server.1, for: slot)
+            settings.setAPIKey(server.2, for: slot)
+        }
+    }
+
+    private func addAllServers(to settings: AppSettings) {
+        while settings.addServer() != nil {}
+    }
+
+    func testServerSlotNumbering() {
+        XCTAssertEqual(ServerSlot.allCases.map(\.index), [0, 1, 2, 3])
+        XCTAssertEqual(ServerSlot.allCases.map(\.number), [1, 2, 3, 4])
+        XCTAssertEqual(ServerSlot.allCases.map(\.defaultName), ["Server 1", "Server 2", "Server 3", "Server 4"])
+        XCTAssertEqual(ServerSlot(index: 0), .primary)
+        XCTAssertEqual(ServerSlot(index: 3), .fourth)
+        XCTAssertNil(ServerSlot(index: -1))
+        XCTAssertNil(ServerSlot(index: 4))
+        XCTAssertEqual(ServerSlot(rawValue: "secondary"), .secondary, "a stored selection still reads back")
+    }
 
     func testSingleServerValuesLoadAsThePrimarySlot() throws {
         let defaults = freshDefaults()
@@ -262,6 +293,7 @@ final class AppSettingsTests: XCTestCase {
         let keychain = freshKeychain()
 
         let first = AppSettings(defaults: defaults, keychain: keychain)
+        XCTAssertEqual(first.addServer(), .secondary)
         first.setBaseURLString("http://192.168.1.83:8081", for: .secondary)
         first.setName("  Studio  ", for: .secondary)
         first.setAPIKey("  second  ", for: .secondary)
@@ -279,17 +311,23 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertTrue(second.hasMultipleServers)
     }
 
-    func testTheTwoKeysDoNotCollide() {
+    func testTheFourKeysDoNotCollide() throws {
         let keychain = freshKeychain()
+        try skipIfKeychainUnavailable(keychain)
         let settings = AppSettings(defaults: freshDefaults(), keychain: keychain)
-        settings.setAPIKey("one", for: .primary)
-        settings.setAPIKey("two", for: .secondary)
+        addAllServers(to: settings)
+        for (slot, value) in zip(ServerSlot.allCases, ["one", "two", "three", "four"]) {
+            settings.setAPIKey(value, for: slot)
+        }
         XCTAssertEqual(keychain.get("apiKey"), "one")
         XCTAssertEqual(keychain.get("apiKey.secondary"), "two")
+        XCTAssertEqual(keychain.get("apiKey.server3"), "three")
+        XCTAssertEqual(keychain.get("apiKey.server4"), "four")
 
         settings.setAPIKey("", for: .secondary)
         XCTAssertNil(keychain.get("apiKey.secondary"))
         XCTAssertEqual(settings.apiKey(for: .primary), "one")
+        XCTAssertEqual(settings.apiKey(for: .third), "three")
     }
 
     func testSelectionPersistsAndDrivesTheSingleServerAPI() throws {
@@ -298,6 +336,7 @@ final class AppSettingsTests: XCTestCase {
 
         let first = AppSettings(defaults: defaults, keychain: keychain)
         first.setAPIKey("one", for: .primary)
+        XCTAssertEqual(first.addServer(), .secondary)
         first.setBaseURLString("http://192.168.1.83:8081", for: .secondary)
         first.setAPIKey("two", for: .secondary)
         first.selectedSlot = .secondary
@@ -317,13 +356,14 @@ final class AppSettingsTests: XCTestCase {
 
     func testSelectionFallsBackWhenTheSecondaryIsNotSetUp() {
         let settings = AppSettings(defaults: freshDefaults(), keychain: freshKeychain())
+        XCTAssertEqual(settings.addServer(), .secondary)
         settings.selectedSlot = .secondary
         XCTAssertEqual(settings.selectedSlot, .primary, "no address yet")
 
         settings.setBaseURLString("http://192.168.1.83:8081", for: .secondary)
         XCTAssertEqual(settings.selectedSlot, .secondary)
 
-        settings.removeSecondary()
+        settings.removeServer(.secondary)
         XCTAssertEqual(settings.selectedSlot, .primary)
         XCTAssertEqual(settings.configuredSlots, [.primary])
         XCTAssertNil(settings.makeClient(for: .secondary))
@@ -331,8 +371,11 @@ final class AppSettingsTests: XCTestCase {
 
     func testDisplayNameFallsBackToTheSlotName() {
         let settings = AppSettings(defaults: freshDefaults(), keychain: freshKeychain())
+        addAllServers(to: settings)
         XCTAssertEqual(settings.displayName(for: .primary), "Server 1")
         XCTAssertEqual(settings.displayName(for: .secondary), "Server 2")
+        XCTAssertEqual(settings.displayName(for: .third), "Server 3")
+        XCTAssertEqual(settings.displayName(for: .fourth), "Server 4")
         settings.setName("Mac Studio", for: .primary)
         XCTAssertEqual(settings.displayName(for: .primary), "Mac Studio")
         settings.setName("   ", for: .primary)
@@ -350,24 +393,272 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertNotNil(settings.makeClient(for: .primary))
     }
 
-    #if DEBUG
-    func testAdoptSecondaryFromEnvironment() {
+    func testDefaultServerCountIsOne() {
+        let defaults = freshDefaults()
+        let settings = AppSettings(defaults: defaults, keychain: freshKeychain())
+        XCTAssertEqual(settings.serverCount, 1)
+        XCTAssertEqual(settings.slots, [.primary])
+        XCTAssertEqual(settings.configuredSlots, [.primary])
+        XCTAssertFalse(settings.hasMultipleServers)
+        XCTAssertTrue(settings.canAddServer)
+        XCTAssertNil(defaults.object(forKey: "settings.serverCount"), "the default is not written")
+    }
+
+    func testALegacySecondaryAddressMigratesToTwoServers() {
+        let defaults = freshDefaults()
+        defaults.set("http://192.168.1.83:8081", forKey: "settings.secondary.baseURL")
+        let settings = AppSettings(defaults: defaults, keychain: freshKeychain())
+        XCTAssertEqual(settings.serverCount, 2)
+        XCTAssertEqual(settings.slots, [.primary, .secondary])
+        XCTAssertTrue(settings.isConfigured(.secondary))
+        XCTAssertTrue(settings.hasMultipleServers)
+        XCTAssertNil(defaults.object(forKey: "settings.serverCount"), "the migration writes nothing")
+
+        let junk = freshDefaults()
+        junk.set("not a url", forKey: "settings.secondary.baseURL")
+        XCTAssertEqual(AppSettings(defaults: junk, keychain: freshKeychain()).serverCount, 1)
+    }
+
+    func testServerCountPersistsAcrossInstances() {
+        let defaults = freshDefaults()
         let keychain = freshKeychain()
+        let first = AppSettings(defaults: defaults, keychain: keychain)
+        XCTAssertNotNil(first.addServer())
+        XCTAssertNotNil(first.addServer())
+        XCTAssertEqual(defaults.object(forKey: "settings.serverCount") as? Int, 3)
+
+        let second = AppSettings(defaults: defaults, keychain: keychain)
+        XCTAssertEqual(second.serverCount, 3)
+        second.removeServer(.third)
+        XCTAssertEqual(second.serverCount, 2)
+        XCTAssertEqual(AppSettings(defaults: defaults, keychain: keychain).serverCount, 2)
+    }
+
+    func testAStoredCountWeDoNotOfferClamps() {
+        let defaults = freshDefaults()
+        defaults.set(9, forKey: "settings.serverCount")
+        XCTAssertEqual(AppSettings(defaults: defaults, keychain: freshKeychain()).serverCount, AppSettings.maxServers)
+        defaults.set(0, forKey: "settings.serverCount")
+        XCTAssertEqual(AppSettings(defaults: defaults, keychain: freshKeychain()).serverCount, 1)
+    }
+
+    func testAddServerFillsTheSlotsThenRefusesMore() throws {
+        let keychain = freshKeychain()
+        try skipIfKeychainUnavailable(keychain)
         let settings = AppSettings(defaults: freshDefaults(), keychain: keychain)
-        settings.adoptSecondaryFromEnvironment(["STRATA_SERVER_2": "not a url"])
+        var added: [ServerSlot] = []
+        while let slot = settings.addServer() { added.append(slot) }
+        XCTAssertEqual(added, [.secondary, .third, .fourth])
+        XCTAssertEqual(settings.serverCount, AppSettings.maxServers)
+        XCTAssertFalse(settings.canAddServer)
+        XCTAssertNil(settings.addServer(), "no fifth server")
+        XCTAssertEqual(settings.slots, [.primary, .secondary, .third, .fourth])
+        XCTAssertEqual(settings.configuredSlots, [.primary], "an added server is listed before it has an address")
+    }
+
+    func testAddServerClearsWhatSatInThatSlotBefore() throws {
+        let keychain = freshKeychain()
+        try skipIfKeychainUnavailable(keychain)
+        let settings = AppSettings(defaults: freshDefaults(), keychain: keychain)
+        settings.setBaseURLString("http://10.9.9.9:8081", for: .secondary)
+        settings.setName("Ghost", for: .secondary)
+        settings.setAPIKey("ghost", for: .secondary)
+
+        XCTAssertEqual(settings.addServer(), .secondary)
+        XCTAssertEqual(settings.baseURLString(for: .secondary), "")
+        XCTAssertEqual(settings.name(for: .secondary), "")
+        XCTAssertEqual(settings.apiKey(for: .secondary), "")
+        XCTAssertNil(keychain.get("apiKey.secondary"))
+        XCTAssertFalse(settings.isConfigured(.secondary))
+    }
+
+    func testThirdAndFourthServersUseTheirOwnKeys() throws {
+        let defaults = freshDefaults()
+        let keychain = freshKeychain()
+        try skipIfKeychainUnavailable(keychain)
+
+        let first = AppSettings(defaults: defaults, keychain: keychain)
+        addAllServers(to: first)
+        fill(first)
+
+        XCTAssertEqual(defaults.string(forKey: "settings.server3.baseURL"), "http://10.0.0.3:8081")
+        XCTAssertEqual(defaults.string(forKey: "settings.server3.name"), "Three")
+        XCTAssertEqual(keychain.get("apiKey.server3"), "k3")
+        XCTAssertEqual(defaults.string(forKey: "settings.server4.baseURL"), "http://10.0.0.4:8081")
+        XCTAssertEqual(defaults.string(forKey: "settings.server4.name"), "Four")
+        XCTAssertEqual(keychain.get("apiKey.server4"), "k4")
+        XCTAssertNil(persisted(defaults).values.first { ($0 as? String) == "k4" }, "the key stays out of UserDefaults")
+
+        let second = AppSettings(defaults: defaults, keychain: keychain)
+        XCTAssertEqual(second.serverCount, 4)
+        XCTAssertEqual(second.configuredSlots, [.primary, .secondary, .third, .fourth])
+        XCTAssertEqual(second.baseURLString(for: .third), "http://10.0.0.3:8081")
+        XCTAssertEqual(second.displayName(for: .third), "Three")
+        XCTAssertEqual(second.apiKey(for: .fourth), "k4")
+    }
+
+    func testRemoveServerCompactsTheList() throws {
+        let defaults = freshDefaults()
+        let keychain = freshKeychain()
+        try skipIfKeychainUnavailable(keychain)
+
+        let settings = AppSettings(defaults: defaults, keychain: keychain)
+        addAllServers(to: settings)
+        fill(settings)
+
+        settings.removeServer(.secondary)
+        XCTAssertEqual(settings.serverCount, 3)
+        XCTAssertEqual(settings.slots, [.primary, .secondary, .third])
+        XCTAssertEqual(settings.baseURLString(for: .secondary), "http://10.0.0.3:8081")
+        XCTAssertEqual(settings.name(for: .secondary), "Three")
+        XCTAssertEqual(settings.apiKey(for: .secondary), "k3")
+        XCTAssertEqual(settings.baseURLString(for: .third), "http://10.0.0.4:8081")
+        XCTAssertEqual(settings.name(for: .third), "Four")
+        XCTAssertEqual(settings.apiKey(for: .third), "k4")
+        XCTAssertEqual(settings.baseURLString(for: .fourth), "")
+        XCTAssertEqual(settings.name(for: .fourth), "")
+        XCTAssertEqual(settings.apiKey(for: .fourth), "")
+        XCTAssertEqual(keychain.get("apiKey.secondary"), "k3")
+        XCTAssertEqual(keychain.get("apiKey.server3"), "k4")
+        XCTAssertNil(keychain.get("apiKey.server4"), "the emptied slot's Keychain item is gone")
+
+        let reloaded = AppSettings(defaults: defaults, keychain: keychain)
+        XCTAssertEqual(reloaded.serverCount, 3)
+        XCTAssertEqual(reloaded.configuredSlots, [.primary, .secondary, .third])
+        XCTAssertEqual(reloaded.displayName(for: .third), "Four")
+    }
+
+    func testRemovingThePrimaryPromotesTheNextServer() throws {
+        let defaults = freshDefaults()
+        let keychain = freshKeychain()
+        try skipIfKeychainUnavailable(keychain)
+
+        let settings = AppSettings(defaults: defaults, keychain: keychain)
+        XCTAssertNotNil(settings.addServer())
+        settings.setBaseURLString("http://10.0.0.1:8081", for: .primary)
+        settings.setName("One", for: .primary)
+        settings.setAPIKey("k1", for: .primary)
+        settings.setBaseURLString("http://10.0.0.2:8081", for: .secondary)
+        settings.setName("Two", for: .secondary)
+        settings.setAPIKey("k2", for: .secondary)
+
+        settings.removeServer(.primary)
+        XCTAssertEqual(settings.serverCount, 1)
+        XCTAssertEqual(settings.slots, [.primary])
+        XCTAssertEqual(settings.baseURLString(for: .primary), "http://10.0.0.2:8081")
+        XCTAssertEqual(settings.name(for: .primary), "Two")
+        XCTAssertEqual(settings.apiKey(for: .primary), "k2")
+        XCTAssertEqual(defaults.string(forKey: "settings.baseURL"), "http://10.0.0.2:8081", "the legacy keys hold it now")
+        XCTAssertEqual(defaults.string(forKey: "settings.name"), "Two")
+        XCTAssertEqual(keychain.get("apiKey"), "k2")
+        XCTAssertEqual(defaults.string(forKey: "settings.secondary.baseURL"), "")
+        XCTAssertNil(keychain.get("apiKey.secondary"))
+
+        let reloaded = AppSettings(defaults: defaults, keychain: keychain)
+        XCTAssertEqual(reloaded.serverCount, 1)
+        XCTAssertEqual(reloaded.slots, [.primary])
+        XCTAssertEqual(reloaded.baseURLString, "http://10.0.0.2:8081")
+        XCTAssertEqual(reloaded.apiKey, "k2")
+        XCTAssertEqual(reloaded.configuredSlots, [.primary])
+        XCTAssertFalse(reloaded.hasMultipleServers)
+    }
+
+    func testRemovingTheSelectedServerSelectsTheOneBeforeIt() throws {
+        let keychain = freshKeychain()
+        try skipIfKeychainUnavailable(keychain)
+        let settings = AppSettings(defaults: freshDefaults(), keychain: keychain)
+        addAllServers(to: settings)
+        fill(settings)
+        settings.selectedSlot = .secondary
+
+        settings.removeServer(.secondary)
+        XCTAssertEqual(settings.selectedSlot, .primary)
+    }
+
+    func testRemovingAnEarlierServerKeepsTheSameServerSelected() throws {
+        let keychain = freshKeychain()
+        try skipIfKeychainUnavailable(keychain)
+        let settings = AppSettings(defaults: freshDefaults(), keychain: keychain)
+        addAllServers(to: settings)
+        fill(settings)
+        settings.selectedSlot = .third
+
+        settings.removeServer(.secondary)
+        XCTAssertEqual(settings.selectedSlot, .secondary, "the same server, one slot down")
+        XCTAssertEqual(settings.baseURLString, "http://10.0.0.3:8081")
+
+        settings.removeServer(.primary)
+        XCTAssertEqual(settings.selectedSlot, .primary)
+        XCTAssertEqual(settings.baseURLString, "http://10.0.0.3:8081")
+    }
+
+    func testRemovingTheOnlyServerIsANoOp() {
+        let defaults = freshDefaults()
+        let settings = AppSettings(defaults: defaults, keychain: freshKeychain())
+        settings.removeServer(.primary)
+        XCTAssertEqual(settings.serverCount, 1)
+        XCTAssertEqual(settings.slots, [.primary])
+        XCTAssertEqual(settings.baseURLString, AppSettings.defaultBaseURLString)
+        XCTAssertNil(defaults.object(forKey: "settings.serverCount"), "a no-op writes nothing")
+
+        settings.removeServer(.fourth)  // not in the list
+        XCTAssertEqual(settings.serverCount, 1)
+
+        let two = AppSettings(defaults: freshDefaults(), keychain: freshKeychain())
+        XCTAssertNotNil(two.addServer())
+        two.removeServer(.fourth)
+        XCTAssertEqual(two.serverCount, 2)
+    }
+
+    func testSlotsPastTheCountAreNotConfiguredEvenWithAStaleAddress() {
+        let defaults = freshDefaults()
+        let settings = AppSettings(defaults: defaults, keychain: freshKeychain())
+        XCTAssertEqual(settings.addServer(), .secondary)
+        settings.setBaseURLString("http://10.0.0.2:8081", for: .secondary)
+        settings.setBaseURLString("http://10.0.0.9:8081", for: .third)  // left behind by an older build
+
+        XCTAssertFalse(settings.isConfigured(.third))
+        XCTAssertEqual(settings.slots, [.primary, .secondary])
+        XCTAssertEqual(settings.configuredSlots, [.primary, .secondary])
+        XCTAssertTrue(settings.hasMultipleServers)
+
+        let reloaded = AppSettings(defaults: defaults, keychain: freshKeychain())
+        XCTAssertEqual(reloaded.serverCount, 2, "an address past the count adds no server")
+        XCTAssertFalse(reloaded.isConfigured(.third))
+        XCTAssertFalse(reloaded.isConfigured(.fourth))
+    }
+
+    #if DEBUG
+    func testAdoptExtraServersFromEnvironment() throws {
+        let keychain = freshKeychain()
+        try skipIfKeychainUnavailable(keychain)
+        let settings = AppSettings(defaults: freshDefaults(), keychain: keychain)
+        settings.adoptExtraServersFromEnvironment(["STRATA_SERVER_2": "not a url"])
+        XCTAssertEqual(settings.serverCount, 1)
         XCTAssertFalse(settings.isConfigured(.secondary))
 
-        settings.adoptSecondaryFromEnvironment([
+        settings.adoptExtraServersFromEnvironment([
             "STRATA_SERVER_2": " http://192.168.1.172:8080 ",
             "STRATA_API_KEY_2": "k2",
             "STRATA_NAME_2": "Coder",
+            "STRATA_SERVER_4": "http://192.168.1.174:8080",
+            "STRATA_NAME_4": "Laptop",
         ])
+        XCTAssertEqual(settings.serverCount, 4, "the highest server the environment offers sets the count")
         XCTAssertEqual(settings.baseURLString(for: .secondary), "http://192.168.1.172:8080")
         XCTAssertEqual(keychain.get("apiKey.secondary"), "k2")
         XCTAssertEqual(settings.displayName(for: .secondary), "Coder")
+        XCTAssertFalse(settings.isConfigured(.third), "nothing was offered for the third")
+        XCTAssertEqual(settings.baseURLString(for: .fourth), "http://192.168.1.174:8080")
+        XCTAssertEqual(settings.displayName(for: .fourth), "Laptop")
 
-        settings.adoptSecondaryFromEnvironment(["STRATA_SERVER_2": "http://10.0.0.1:8080"])
+        settings.adoptExtraServersFromEnvironment([
+            "STRATA_SERVER_2": "http://10.0.0.1:8080",
+            "STRATA_SERVER_4": "http://10.0.0.4:8080",
+        ])
         XCTAssertEqual(settings.baseURLString(for: .secondary), "http://192.168.1.172:8080", "a saved server wins")
+        XCTAssertEqual(settings.baseURLString(for: .fourth), "http://192.168.1.174:8080")
+        XCTAssertEqual(settings.serverCount, 4)
     }
     #endif
 }
