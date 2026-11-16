@@ -43,13 +43,13 @@ final class MenuBarLabelTests: XCTestCase {
 
     func testTooltipNamesTheModelAndTheLastRequest() throws {
         let metrics = try Fixtures.metrics(named: "metrics_generating", testClass: type(of: self))
-        let row = try XCTUnwrap(MonitorViewModel(metrics: metrics).requests.first)
-        let text = MenuBarLabel.tooltip(model: "Strata-Qwen3-32B", lastRow: row)
+        let request = try XCTUnwrap(metrics.requests?.first)
+        let text = MenuBarLabel.tooltip(model: "Strata-Qwen3-32B", lastRequest: request)
         XCTAssertTrue(text.hasPrefix("Strata-Qwen3-32B · last: "))
         XCTAssertTrue(text.contains(" t/s"))
 
-        XCTAssertEqual(MenuBarLabel.tooltip(model: nil, lastRow: nil), "")
-        XCTAssertEqual(MenuBarLabel.tooltip(model: "", lastRow: nil), "")
+        XCTAssertEqual(MenuBarLabel.tooltip(model: nil, lastRequest: nil), "")
+        XCTAssertEqual(MenuBarLabel.tooltip(model: "", lastRequest: nil), "")
     }
 
     func testPopoverTilesUseTheSmallerValueSize() {

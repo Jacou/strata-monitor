@@ -129,9 +129,25 @@ final class ServerMonitorModel {
     var engine: ServerEngine { poller?.engine ?? .strata }
     var slots: [Slot] { poller?.slots ?? [] }
 
-    /// The Monitor's derivations, reused whole by the popover.
+    /// The Monitor's derivations, reused whole by the popover. Derived once per payload: it is the
+    /// heaviest computation in the app, and the menu bar item's tooltip reads it on every redraw.
+    /// Kept out of the observation graph — a getter must not re-invalidate the views reading it.
+    @ObservationIgnored private var cachedMonitor:
+        (payload: Metrics, loaded: Bool?, slots: [Slot], model: MonitorViewModel)?
+
     var monitor: MonitorViewModel? {
-        metrics.map { MonitorViewModel(metrics: $0, modelLoaded: health?.loaded, slots: slots) }
+        guard let metrics else {
+            cachedMonitor = nil
+            return nil
+        }
+        let loaded = health?.loaded
+        let slots = self.slots
+        if let cached = cachedMonitor, cached.payload == metrics, cached.loaded == loaded, cached.slots == slots {
+            return cached.model
+        }
+        let model = MonitorViewModel(metrics: metrics, modelLoaded: loaded, slots: slots)
+        cachedMonitor = (metrics, loaded, slots, model)
+        return model
     }
 
     /// The hover card's own, smaller derivation.

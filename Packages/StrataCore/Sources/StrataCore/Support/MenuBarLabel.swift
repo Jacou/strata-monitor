@@ -41,11 +41,14 @@ public enum MenuBarLabel {
         }
     }
 
-    /// The hover tooltip: which model is loaded, and what the last request did.
-    public static func tooltip(model: String?, lastRow: MonitorViewModel.RequestRow?) -> String {
+    /// The hover tooltip: which model is loaded, and what the last request did. Read straight off
+    /// the payload — deriving the whole Monitor screen is far too dear for two numbers in a tooltip.
+    public static func tooltip(model: String?, lastRequest: Request?) -> String {
         var parts: [String] = []
         if let model, !model.isEmpty { parts.append(model) }
-        if let lastRow { parts.append("last: \(lastRow.outputText) out · \(lastRow.tokSText) t/s") }
+        if let lastRequest {
+            parts.append("last: \(fmt(lastRequest.outputTokens, 0)) out · \(fmt(lastRequest.decodeTokS, 1)) t/s")
+        }
         return parts.joined(separator: " · ")
     }
 }
