@@ -65,8 +65,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     /// now wants waits in `pendingLength` until the card closes.
     private var pinnedLength: CGFloat?
     private var pendingLength: CGFloat?
-    /// Whether the label view is currently allowed to draw its digits.
-    private var labelShowsText = true
+    /// Whether the label draws its digits. The label observes this box, so a width change re-renders
+    /// the label in place; the hosting view's root view is set once, in `install`.
+    private let labelLayout = MenuBarItemLayout()
     /// True during the click that swaps the hover card for the full popover, so the width stays pinned
     /// across the handoff instead of resizing between the two cards.
     private var cardHandoff = false
@@ -106,7 +107,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         item.autosaveName = "StrataMonitor.\(server.slot.rawValue)"
         button.setAccessibilityLabel("Strata Monitor — \(server.displayName)")
 
-        let hosting = PassthroughHostingView(rootView: labelRootView(showsText: true))
+        let hosting = PassthroughHostingView(rootView: labelRootView())
         // Only the height is AppKit's: the width and the flush-right origin are ours (placeLabel).
         hosting.autoresizingMask = [.height]
         button.addSubview(hosting)
@@ -203,8 +204,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         if inside { pointerEntered() } else { pointerLeft() }
     }
 
-    private func labelRootView(showsText: Bool) -> AnyView {
-        AnyView(MenuBarStatusLabel(model: model, showsText: showsText).strataTheme { [model] in model.engine })
+    private func labelRootView() -> AnyView {
+        AnyView(MenuBarStatusLabel(model: model, layout: labelLayout).strataTheme { [model] in model.engine })
     }
 
     /// The item's width follows the label — the icon alone when idle, `104 t/s` when busy — except
@@ -214,7 +215,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         guard let button = statusItem?.button, let hosting = labelHosting else { return }
 
         // Always measure the label at full size first, whatever the item is pinned to right now.
-        setLabel(hosting, showsText: true)
+        // Written only when it changes: an @Observable box notifies on every assignment, and a
+        // needless write here invalidates the label on every poll.
+        if !labelLayout.showsText { labelLayout.showsText = true }
         hosting.layoutSubtreeIfNeeded()
         let size = hosting.fittingSize
         guard size.width > 0, size.height > 0 else { return }
@@ -232,23 +235,23 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         } else {
             pendingLength = decision.wanted
         }
-        setLabel(hosting, showsText: decision.showsText)
-        placeLabel(hosting, in: button, maxWidth: decision.pinned)
-    }
-
-    private func setLabel(_ hosting: PassthroughHostingView<AnyView>, showsText: Bool) {
-        guard showsText != labelShowsText else { return }
-        labelShowsText = showsText
-        hosting.rootView = labelRootView(showsText: showsText)
+        // With the digits still drawn, the label is exactly the size just measured — re-measuring an
+        // unchanged view is a second full pass over it, once per poll, for nothing. Only putting the
+        // icon away changes what the label is, and only then is another pass worth its cost.
+        var drawn = size
+        if !decision.showsText {
+            labelLayout.showsText = false
+            hosting.layoutSubtreeIfNeeded()
+            drawn = hosting.fittingSize
+            guard drawn.width > 0, drawn.height > 0 else { return }
+        }
+        placeLabel(hosting, in: button, size: drawn, maxWidth: decision.pinned)
     }
 
     /// Flush-right inside the button, vertically centred: the icon rides the item's right edge, which
     /// is the edge macOS keeps fixed, so the text is what grows leftward. `maxWidth` is the pinned
     /// length, so while a card is open the label can only shrink to fit the item, never spill out of it.
-    private func placeLabel(_ hosting: NSView, in button: NSStatusBarButton, maxWidth: CGFloat?) {
-        hosting.layoutSubtreeIfNeeded()
-        let size = hosting.fittingSize
-        guard size.width > 0, size.height > 0 else { return }
+    private func placeLabel(_ hosting: NSView, in button: NSStatusBarButton, size: CGSize, maxWidth: CGFloat?) {
         var width = ceil(size.width)
         if let maxWidth, maxWidth > 0 { width = min(width, maxWidth) }
         hosting.frame = CGRect(

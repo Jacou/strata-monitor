@@ -46,6 +46,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
 }
 
+/// The one thing the label draws that its model does not carry: whether the digits fit in the width
+/// the status item currently has.
+///
+/// Its own observable box, so a width change re-renders the label where it stands. Swapping the
+/// hosting view's root view instead — the way this worked while the digits were a `showsText`
+/// parameter of the view — rebuilds the whole SwiftUI graph behind a nine-character label.
+@Observable @MainActor
+final class MenuBarItemLayout {
+    /// False while a card is open and the item's width is pinned too narrow for the digits: the card
+    /// says all of it anyway, so show the icon rather than clipped text.
+    var showsText = true
+}
+
 /// The menu bar item's content: the number that matters, then the SF Symbol for the state.
 ///
 /// The symbol goes on the **right**. macOS lays status items out from the right edge of the bar, so
@@ -53,13 +66,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// both cards are anchored to — keeps its screen position while `idle` becomes `104 t/s`.
 struct MenuBarStatusLabel: View {
     let model: ServerMonitorModel
-    /// False while a card is open and the item's width is pinned too narrow for the digits: the card
-    /// says all of it anyway, so show the icon rather than clipped text.
-    var showsText = true
+    /// Read here, written by the controller (`StatusItemController.refreshLabel`).
+    let layout: MenuBarItemLayout
 
     var body: some View {
         let status = model.status
-        let text = showsText ? MenuBarLabel.text(for: status) : ""
+        let text = layout.showsText ? MenuBarLabel.text(for: status) : ""
 
         HStack(spacing: 5) {
             // Which server, when there is more than one: on the left, so the icon keeps the right edge.
@@ -76,7 +88,7 @@ struct MenuBarStatusLabel: View {
         .foregroundStyle(.primary)
         .fixedSize()
         // The hover card is the real answer; this is the fallback VoiceOver and slow hovers get.
-        .help([model.cardName, MenuBarLabel.tooltip(model: model.modelName, lastRow: model.monitor?.requests.first)]
+        .help([model.cardName, MenuBarLabel.tooltip(model: model.modelName, lastRequest: model.metrics?.requests?.first)]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
     }
 }
