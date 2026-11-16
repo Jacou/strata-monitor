@@ -71,8 +71,15 @@ private struct PulsingDot: View {
                     .opacity(on ? 0.2 : 0.9)
             )
             .scaleEffect(animates && on ? 1.15 : 1)
-            .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: on)
+            // `on && animates`, not `animates`: a repeatForever animation outlives the view that put
+            // it up only as long as that view is still there — and a closed menu bar card keeps its
+            // content view alive (see StatusItemController.popoverDidClose). One hover over a
+            // generating server used to leave a 1.6 s ring ticking forever, redrawing the app at the
+            // display's refresh rate. The ring stops when the dot is put away, and with Reduce Motion
+            // asked for, which the old code pulsed anyway.
+            .animation(on && animates ? .easeInOut(duration: 1.6).repeatForever(autoreverses: true) : nil, value: on)
             .onAppear { on = true }
+            .onDisappear { on = false }
             .accessibilityHidden(true)
     }
 }

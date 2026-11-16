@@ -487,6 +487,12 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         hoverLogLine("popoverDidClose: full=\(full) hover=\(hover)")
         releasePinnedLength()
         applyCadence()
+        // Both popovers are reused, and each open hands over a fresh content view controller; the one
+        // it replaces would otherwise stay alive behind the closed popover, with its view graph still
+        // animating and still being laid out. Put that graph away with the window that held it.
+        if let closed = notification.object as? NSPopover, !closed.isShown {
+            closed.contentViewController = nil
+        }
     }
 
     /// 1 s while either card is on screen, the chosen cadence when neither is.
