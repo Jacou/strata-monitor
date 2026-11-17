@@ -13,6 +13,11 @@ import UniformTypeIdentifiers
 ///
 /// The result is written to StrataMonitor/Assets.xcassets/AppIcon.appiconset/icon.png.
 /// The asset catalog entry is single-size, so Xcode generates every required size from it.
+///
+/// The macOS menu bar app needs its own sizes, and macOS wants a smaller body on a bigger canvas
+/// rather than full-bleed art, so pass --mac to write those too:
+///
+///     swift tools/make-icon.swift --mac StrataMenuBar/Assets.xcassets/AppIcon.appiconset
 
 let size = 1024
 let side = CGFloat(size)
@@ -164,7 +169,46 @@ func writePreview(to outPath: String) {
     print("wrote \(outPath)")
 }
 
+/// The macOS icon grid: the body is 80.5 % of the canvas, centred, with corners at 22.45 % of the
+/// body — iOS masks the art you give it, macOS expects the padding to already be in the file.
+func writeMacIconset(to dir: String) {
+    guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
+          let art = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+        fatalError("could not read \(path)")
+    }
+
+    for pixels in [16, 32, 64, 128, 256, 512, 1024] {
+        let canvas = CGFloat(pixels)
+        guard let out = CGContext(
+            data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
+            space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { fatalError("could not create bitmap context at \(pixels)") }
+
+        let body = canvas * 0.805
+        let inset = (canvas - body) / 2
+        let rect = CGRect(x: inset, y: inset, width: body, height: body)
+        out.addPath(CGPath(roundedRect: rect, cornerWidth: body * 0.2245,
+                           cornerHeight: body * 0.2245, transform: nil))
+        out.clip()
+        out.interpolationQuality = .high
+        out.draw(art, in: rect)
+
+        guard let image = out.makeImage() else { fatalError("could not build image at \(pixels)") }
+        let file = dir + "/icon_\(pixels)px.png"
+        guard let dest = CGImageDestinationCreateWithURL(
+            URL(fileURLWithPath: file) as CFURL, UTType.png.identifier as CFString, 1, nil
+        ) else { fatalError("could not open \(file) for writing") }
+        CGImageDestinationAddImage(dest, image, nil)
+        guard CGImageDestinationFinalize(dest) else { fatalError("could not write \(file)") }
+        print("wrote \(file) (\(pixels)x\(pixels))")
+    }
+}
+
 if let index = CommandLine.arguments.firstIndex(of: "--preview"), index + 1 < CommandLine.arguments.count {
     writePreview(to: CommandLine.arguments[index + 1])
+}
+
+if let index = CommandLine.arguments.firstIndex(of: "--mac"), index + 1 < CommandLine.arguments.count {
+    writeMacIconset(to: CommandLine.arguments[index + 1])
 }
 

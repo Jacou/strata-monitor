@@ -94,6 +94,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: StrataMenuBar/StrataMenuBar.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 schemes:
   StrataMonitor:
     build:
