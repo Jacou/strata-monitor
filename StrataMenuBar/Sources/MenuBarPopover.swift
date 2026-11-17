@@ -44,11 +44,17 @@ struct MenuBarPopover: View {
             header
 
             if model.isConfigured {
-                ScrollView(.vertical) {
+                // With room on the screen the body is laid out plain — no scroll view at all, so there
+                // is no scroller to appear and nothing to re-offset every time a poll changes the
+                // widget's height. Only when the screen cannot hold it does it scroll.
+                if bodyHeight > maxBodyHeight {
+                    ScrollView(.vertical) {
+                        scrollableBody(monitor)
+                    }
+                    .frame(height: maxBodyHeight)
+                } else {
                     scrollableBody(monitor)
                 }
-                // The viewport is the widget: no scrollbar while the screen has room for all of it.
-                .frame(height: min(bodyHeight, maxBodyHeight))
             } else {
                 emptyState
             }
@@ -86,7 +92,11 @@ struct MenuBarPopover: View {
             requests(monitor)
         }
         .padding(.bottom, 2)
-        .fixedSize(horizontal: false, vertical: true)
+        // Its own height, reported from the inside. No fixedSize: in the plain branch nothing proposes
+        // a height to it and in the scrolling branch a scroll view proposes an unbounded one, so the
+        // number is the widget's real height either way — and fixedSize would ask every GeometryReader
+        // in here (the progress bars) for a size it has no proposal for, which is how a bar ends up a
+        // small blob of its own.
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
             bodyHeight = height
         }
