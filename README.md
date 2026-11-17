@@ -72,8 +72,10 @@ side by side, content capped at 1200 pt. A narrow Split View falls back to the i
 - **Hover** the icon — a read-only card with the state, **Decode** and **Prefill** in t/s (live
   while the engine works, the last request's values when idle), the model name and how fresh the
   numbers are.
-- **Click** — the full popover: live state, the eight tiles, context gauge and bars, the last five
-  requests, links to the Strata web page, Settings and Quit. **Right-click** — Settings and Quit.
+- **Click** — the full popover, at the widget's own height rather than a fixed window with a scroll
+  bar: live state, the eight tiles, context gauge and bars, the last five requests, links to the Strata
+  web page, Settings and Quit. Only a screen too short for the lot sends it back to scrolling.
+  **Right-click** — Settings and Quit.
 - **Up to four servers** — each configured server gets its own menu bar item, hover card and popover,
   with the start of its name (or its number) in front of the label so they read apart. ⌘-drag
   to reorder; the order sticks.

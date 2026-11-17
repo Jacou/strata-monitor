@@ -47,6 +47,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     static let pointerSlack: CGFloat = 2
     /// The slice of the item the icon occupies, and therefore the rect both cards anchor to.
     static let iconAnchorWidth: CGFloat = 18
+    /// Besides the measured chrome, what the click popover still leaves before the bottom of the
+    /// screen: its arrow, the window's own border and the gap under the menu bar. Checked against the
+    /// `fullPopover:` line the open logs rather than assumed.
+    static let chromeAllowance: CGFloat = 24
 
     let server: ServerMonitorModel
     private var model: ServerMonitorModel { server }
@@ -144,6 +148,21 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
         statusItem = nil
         labelHosting = nil
+    }
+
+    /// The screen this item sits on, below the menu bar and above the Dock.
+    private func availableScreenHeight(for button: NSStatusBarButton) -> CGFloat? {
+        (button.window?.screen ?? NSScreen.main)?.visibleFrame.height
+    }
+
+    /// What the click popover shows besides its body: the badge, the name, the pill, the footer, the
+    /// padding. Measured with the body at zero height, because it depends on the engine, the theme and
+    /// how long the server's name is.
+    private func measuredChromeHeight() -> CGFloat {
+        let probe = NSHostingView(rootView: MenuBarPopover(model: model, maxBodyHeight: 0)
+            .strataTheme { [model] in model.engine })
+        probe.layoutSubtreeIfNeeded()
+        return probe.fittingSize.height
     }
 
     /// Where the pointer is, in screen coordinates: the item's rect in its own window, pushed out
@@ -336,20 +355,42 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             fullPopover.close()
         } else {
             // The popover follows the SwiftUI content as it reflows (a longer pill, more request
-            // rows): `preferredContentSize` is what NSPopover animates to.
+            // rows): `preferredContentSize` is what NSPopover animates to. The body reports its own
+            // height from inside the scroll view, so the window grows to the whole widget and the
+            // scroll bar only appears when the screen below the menu bar cannot hold it.
             let controller = NSViewController()
-            let hosting = NSHostingView(rootView: MenuBarPopover(model: model).strataTheme { [model] in model.engine }
+            // Everything the widget shows besides its body is measured, not guessed, with the body at
+            // zero height; the body then gets whatever screen is left over. So the window grows to the
+            // whole widget, and the scroll bar only appears when even that is more than will fit.
+            let chrome = measuredChromeHeight()
+            let bodyLimit: CGFloat
+            if let screen = availableScreenHeight(for: button) {
+                bodyLimit = max(320, screen - chrome - Self.chromeAllowance)
+            } else {
+                bodyLimit = .greatestFiniteMagnitude
+            }
+            let hosting = NSHostingView(rootView: MenuBarPopover(model: model, maxBodyHeight: bodyLimit)
+                .strataTheme { [model] in model.engine }
                 .onGeometryChange(for: CGSize.self, of: { $0.size }) { [weak controller] size in
                     guard size.width > 0, size.height > 0 else { return }
                     controller?.preferredContentSize = size
                 })
             controller.view = hosting
+            // Lay it out once before asking for a size: the body's height arrives through a geometry
+            // callback, and fittingSize read before that first layout is the starting guess.
+            hosting.layoutSubtreeIfNeeded()
             controller.preferredContentSize = hosting.fittingSize
             fullPopover.contentViewController = controller
 
             pinLength()
             NSApp.activate(ignoringOtherApps: true)
             fullPopover.show(relativeTo: iconRect(in: button), of: button, preferredEdge: .minY)
+            // Geometry, for the same reason the hover card logs it: whether the widget ended up on the
+            // screen the item lives on is the first thing to look at when it did not. Everything here is
+            // inside the autoclosure, so an app without STRATA_HOVER_LOG asks for none of it.
+            hoverLogLine("fullPopover: content=\(controller.preferredContentSize) bodyLimit=\(bodyLimit)"
+                + " chrome=\(chrome) window=\(String(describing: controller.view.window?.frame))"
+                + " visible=\(String(describing: (button.window?.screen ?? NSScreen.main)?.visibleFrame))")
         }
         applyCadence()
     }

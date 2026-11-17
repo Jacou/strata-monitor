@@ -7,15 +7,24 @@ import SwiftUI
 /// the last five requests, and a footer.
 struct MenuBarPopover: View {
     static let contentWidth: CGFloat = 360
-    static let contentHeight: CGFloat = 520
+    /// The guess the body starts with, until it has measured what the widget actually needs.
+    static let initialBodyHeight: CGFloat = 520
     /// The spec's compact tile: a smaller value and a 28-point sparkline.
     static let sparklineHeight: CGFloat = 28
     static let requestCount = 5
 
     let model: ServerMonitorModel
+    /// The most the body may take. The popover grows to the whole widget instead of scrolling inside
+    /// a fixed window, so this only bites when the screen cannot hold everything: then, and only then,
+    /// the body scrolls. The controller works it out from the screen below the menu bar.
+    var maxBodyHeight: CGFloat = .greatestFiniteMagnitude
 
     @Environment(\.theme) private var theme
     @Environment(\.openSettings) private var openSettings
+
+    /// What the body measured itself to be. Inside a ScrollView the content is proposed an unbounded
+    /// height along the scroll axis, so this is the widget's real height, not the viewport's.
+    @State private var bodyHeight: CGFloat = MenuBarPopover.initialBodyHeight
 
     var body: some View {
         let monitor = model.monitor ?? MonitorViewModel(metrics: Metrics())
@@ -36,28 +45,10 @@ struct MenuBarPopover: View {
 
             if model.isConfigured {
                 ScrollView(.vertical) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        LiveStateCard(card: monitor.live)
-                        if let queue = monitor.queue {
-                            QueueCardView(card: queue)
-                        }
-                        if let slots = monitor.slots {
-                            SlotsCardView(card: slots, compact: true)
-                        }
-                        tiles(monitor)
-                        ResourcesCard(
-                            context: monitor.context,
-                            experts: monitor.experts,
-                            ram: monitor.ram,
-                            temp: monitor.temp
-                        )
-                        if model.engine == .basalt, let sources = monitor.expertSources {
-                            ExpertSourcesCardView(sources: sources)
-                        }
-                        requests(monitor)
-                    }
-                    .padding(.bottom, 2)
+                    scrollableBody(monitor)
                 }
+                // The viewport is the widget: no scrollbar while the screen has room for all of it.
+                .frame(height: min(bodyHeight, maxBodyHeight))
             } else {
                 emptyState
             }
@@ -65,11 +56,41 @@ struct MenuBarPopover: View {
             footer
         }
         .padding(12)
-        .frame(width: Self.contentWidth, height: Self.contentHeight)
+        .frame(width: Self.contentWidth)
         .background(theme.background)
     }
 
     // MARK: - pieces
+
+    /// Everything that scrolls: the live state, Basalt's queue and slots, the eight tiles, the
+    /// context ring with the resource bars, Basalt's expert sources, the last five requests.
+    private func scrollableBody(_ monitor: MonitorViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            LiveStateCard(card: monitor.live)
+            if let queue = monitor.queue {
+                QueueCardView(card: queue)
+            }
+            if let slots = monitor.slots {
+                SlotsCardView(card: slots, compact: true)
+            }
+            tiles(monitor)
+            ResourcesCard(
+                context: monitor.context,
+                experts: monitor.experts,
+                ram: monitor.ram,
+                temp: monitor.temp
+            )
+            if model.engine == .basalt, let sources = monitor.expertSources {
+                ExpertSourcesCardView(sources: sources)
+            }
+            requests(monitor)
+        }
+        .padding(.bottom, 2)
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
+            bodyHeight = height
+        }
+    }
 
     private var header: some View {
         HStack(alignment: .center, spacing: 8) {
