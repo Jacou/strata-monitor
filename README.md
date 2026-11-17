@@ -79,6 +79,12 @@ side by side, content capped at 1200 pt. A narrow Split View falls back to the i
   to reorder; the order sticks.
 - **Settings window** — per server: name, address, key (its own Keychain entry), Test connection,
   Remove, Add server; then Launch at login and the idle refresh rate (5 / 15 / 30 s; 1 s while a card is open).
+- **Steady state** — closing a card takes its content view with it, and the pulsing dot stops when the
+  dot leaves the screen. A closed card used to keep its view graph alive and animating, so one hover over
+  a generating server was enough to leave that item costing 3-5 % of a core, forever, card open or not;
+  now it falls back to idle. The label's tooltip reads the payload instead of deriving a whole
+  `MonitorViewModel`, and that derivation is cached per payload. Two servers, nothing open, Debug build:
+  under 1 % of a core.
 - **Polling** — one `GET /metrics` (~13 KB) per tick, `/health` every tenth. When the server stops
   answering the delay doubles (5 → 10 → 20 → 40 → 60 s); after three misses at 60 s it stops
   altogether and the card says "Paused · click to retry". A click, a wake from sleep, an unlock
