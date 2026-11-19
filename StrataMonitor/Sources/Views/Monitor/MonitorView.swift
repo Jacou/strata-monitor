@@ -30,7 +30,8 @@ public struct MonitorView: View {
                         allRequests: poller.allRequests,
                         fullRequests: poller.trendRequests,
                         modelLoaded: poller.health?.loaded,
-                        slots: poller.slots
+                        slots: poller.slots,
+                        engine: poller.engine
                     )
                     // Measured on the viewport, not on the capped content, so the column
                     // count cannot feed back on itself.
@@ -74,6 +75,7 @@ public struct MonitorView: View {
                                         experts: model.experts,
                                         ram: model.ram,
                                         temp: model.temp,
+                                        showsEngineBars: model.showsEngineBars,
                                         fillsHeight: true
                                     )
 
@@ -85,7 +87,8 @@ public struct MonitorView: View {
                                     context: model.context,
                                     experts: model.experts,
                                     ram: model.ram,
-                                    temp: model.temp
+                                    temp: model.temp,
+                                    showsEngineBars: model.showsEngineBars
                                 )
                                 .id("resources")
 

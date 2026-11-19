@@ -1,11 +1,15 @@
 import SwiftUI
 
-/// Context gauge, expert cache bar, RAM bar (red above 92%), GPU temperature bar.
+/// Context gauge, expert cache bar, RAM bar (red above 92%), GPU temperature bar. The engine
+/// bars are optional: oMLX has no expert cache or GPU temperature, so its card shows the gauge
+/// and RAM only.
 public struct ResourcesCard: View {
     public let context: MonitorViewModel.Context
     public let experts: MonitorViewModel.Bar
     public let ram: MonitorViewModel.Bar
     public let temp: MonitorViewModel.Bar
+    /// False for an engine that reports no expert cache or GPU temperature (oMLX).
+    public let showsEngineBars: Bool
     /// In the wide layout the card shares a row with the conversation cache; this is what makes
     /// the card's background stretch to the row's height instead of stopping short.
     public let fillsHeight: Bool
@@ -17,12 +21,14 @@ public struct ResourcesCard: View {
         experts: MonitorViewModel.Bar,
         ram: MonitorViewModel.Bar,
         temp: MonitorViewModel.Bar,
+        showsEngineBars: Bool = true,
         fillsHeight: Bool = false
     ) {
         self.context = context
         self.experts = experts
         self.ram = ram
         self.temp = temp
+        self.showsEngineBars = showsEngineBars
         self.fillsHeight = fillsHeight
     }
 
@@ -30,9 +36,13 @@ public struct ResourcesCard: View {
         HStack(alignment: .center, spacing: 14) {
             ring
             VStack(alignment: .leading, spacing: 12) {
-                bar("Expert cache", experts)
+                if showsEngineBars {
+                    bar("Expert cache", experts)
+                }
                 bar("RAM", ram)
-                bar("GPU temp", temp)
+                if showsEngineBars {
+                    bar("GPU temp", temp)
+                }
             }
         }
         .strataCard(theme, fillsHeight: fillsHeight)

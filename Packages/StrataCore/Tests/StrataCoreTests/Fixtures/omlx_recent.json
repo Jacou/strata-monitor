@@ -1,0 +1,68 @@
+{
+  "requests": [
+    {
+      "finished_at": 1795058824,
+      "model": "DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp",
+      "prompt_tokens": 97480,
+      "output_tokens": 601,
+      "duration_s": 9.81,
+      "tok_s": 74.3,
+      "finish": "tool_calls",
+      "max_tokens": 65536,
+      "request_max_tokens": 65536,
+      "ttft_s": 1.71,
+      "context_used": 98081,
+      "context_window": 1048576
+    },
+    {
+      "finished_at": 1795058810,
+      "model": "DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp",
+      "prompt_tokens": 96571,
+      "output_tokens": 508,
+      "duration_s": 9.65,
+      "tok_s": 72.6,
+      "finish": "tool_calls",
+      "max_tokens": 65536,
+      "request_max_tokens": 65536,
+      "ttft_s": 2.65,
+      "context_used": 97079,
+      "context_window": 1048576
+    },
+    {
+      "finished_at": 1795058800,
+      "model": "DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp",
+      "prompt_tokens": 93291,
+      "output_tokens": 3256,
+      "duration_s": 44.74,
+      "tok_s": 75.2,
+      "finish": "tool_calls",
+      "max_tokens": 65536,
+      "request_max_tokens": 65536,
+      "ttft_s": 1.44,
+      "context_used": 96547,
+      "context_window": 1048576
+    },
+    {
+      "finished_at": 1795058754,
+      "model": "DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp",
+      "prompt_tokens": 92856,
+      "output_tokens": 123,
+      "duration_s": 2.99,
+      "tok_s": 83.4,
+      "finish": "tool_calls",
+      "max_tokens": 65536,
+      "request_max_tokens": 65536,
+      "ttft_s": 1.52,
+      "context_used": 92979,
+      "context_window": 1048576
+    }
+  ],
+  "windows": {
+    "DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp": 1048576,
+    "GLM-5.3-Flash-oQ4e-mtp": 1048576,
+    "Qwen3.8-Flash-Next-DFlash2": 262144,
+    "Qwen3.8-Flash-Next-Q8_0": 262144
+  },
+  "generated_at": 1795058836,
+  "slots": 4
+}

@@ -31,9 +31,13 @@ public func kfmt(_ value: Double?, locale: Locale = .autoupdatingCurrent) -> Str
     return fmt(value, 0, locale: locale)
 }
 
-/// `ctxfmt(n)`: a context size — 32768 → "32K" (powers of two), otherwise like `kfmt`.
+/// `ctxfmt(n)`: a context size — 32768 → "32K", 1048576 → "1M" (powers of two), otherwise
+/// like `kfmt`.
 public func ctxfmt(_ value: Double?, locale: Locale = .autoupdatingCurrent) -> String {
     guard let value else { return notAvailable }
+    if value != 0, value.truncatingRemainder(dividingBy: 1_048_576) == 0 {
+        return fmt(value / 1_048_576, 0, locale: locale) + "M"
+    }
     if value != 0, value.truncatingRemainder(dividingBy: 1_024) == 0 {
         return fmt(value / 1_024, 0, locale: locale) + "K"
     }

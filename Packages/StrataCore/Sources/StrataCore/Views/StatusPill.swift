@@ -9,6 +9,7 @@ extension MonitorStatus {
         case .generating: "bolt.fill"
         case .queued: "hourglass"
         case .modelUnloaded: "square.stack.3d.up.slash"
+        case .modelLoading: "arrow.down.circle"
         case .unauthorized: "key.slash"
         case .unreachable: "wifi.slash"
         }

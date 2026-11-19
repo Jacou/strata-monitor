@@ -12,6 +12,8 @@ public enum MonitorStatus: Equatable, Sendable {
     case queued(Int)
     /// /health says the model is not resident yet; the first request will load it.
     case modelUnloaded
+    /// oMLX is swapping a model in (`is_loading`): the server is up, but nothing decodes yet.
+    case modelLoading
     /// 401 from /metrics.
     case unauthorized
     /// Three consecutive failures.
@@ -25,6 +27,7 @@ public enum MonitorStatus: Equatable, Sendable {
         case .generating(let tokS): "Generating · \(fmt(tokS, 1)) tok/s"
         case .queued(let count): "\(count) queued"
         case .modelUnloaded: "Model unloaded"
+        case .modelLoading: "Loading model"
         case .unauthorized: "API key needed"
         case .unreachable: "Server not reachable"
         }
@@ -68,6 +71,13 @@ public final class MetricsPoller {
     /// Basalt with more than one slot: `GET /slots` from the same tick, empty otherwise.
     public private(set) var slots: [Slot] = []
     public private(set) var trendsUpdated: Date?
+    /// oMLX's lifetime totals, fetched every 30th poll (the guide's 30–60 s) rather than each tick.
+    private var omlxStats: OmLXStats?
+    private let statsEveryPolls = 30
+    /// The proxy's finished-request journal: every 5th poll, so the Recent requests card stays
+    /// fresh without pulling 6 KB on every tick.
+    private var omlxRecent: OmLXRecent?
+    private let recentEveryPolls = 5
 
     /// False while `scenePhase != .active` (iOS) or the Mac is asleep / locked: the loop is stopped.
     public private(set) var isActive = true
@@ -152,6 +162,8 @@ public final class MetricsPoller {
     /// One `metrics?requests=all` fetch for the trends card. A failure keeps the series already on
     /// screen rather than blanking the chart.
     public func refreshTrends() async {
+        // oMLX has no per-request history endpoint; the sparklines come from the sampled polls.
+        guard engine != .omlx else { return }
         do {
             let all = try await client.metrics(allRequests: true)
             trendRequests = all.requests ?? []
@@ -181,6 +193,8 @@ public final class MetricsPoller {
         status = .unknown
         health = nil
         slots = []
+        omlxStats = nil
+        omlxRecent = nil
         sampled = SampledHistory()
         polls = 0
         resume()
@@ -210,9 +224,16 @@ public final class MetricsPoller {
     /// One poll. Public so the pull-to-refresh / "Test connection" path can reuse it.
     public func pollOnce() async {
         guard isActive, !isPaused else { return }
+        // The engine comes from /health. A fresh address would otherwise be treated as Strata and
+        // asked for /metrics, which oMLX does not serve, so the first tick asks /health first.
+        if health == nil { await pollHealth() }
+        if engine == .omlx {
+            await pollOmLX()
+            return
+        }
         do {
             var fetched = try await client.metrics(allRequests: false)
-            sampled.record(fetched.hardware)
+            sampled.record(fetched.hardware, fetched.live)
             fetched.history = sampled.filling(fetched.history)
             // The per-slot rows come from their own endpoint; one failing must not fail the tick.
             if fetched.live?.isMultiSlot == true {
@@ -230,6 +251,36 @@ public final class MetricsPoller {
             if polls % healthEveryPolls == 1 || health == nil {
                 await pollHealth()
             }
+            status = Self.status(from: fetched, loaded: health?.loaded)
+        } catch let error as StrataError {
+            record(error)
+        } catch {
+            record(StrataError.unreachable)
+        }
+    }
+
+    /// One oMLX tick: the live payload every time, the lifetime totals when they are due.
+    private func pollOmLX() async {
+        do {
+            let activity = try await client.omlxActivity()
+            if omlxStats == nil || polls % statsEveryPolls == 0 {
+                omlxStats = (try? await client.omlxStats()) ?? omlxStats
+            }
+            if omlxRecent == nil || polls % recentEveryPolls == 0 {
+                omlxRecent = (try? await client.omlxRecent()) ?? omlxRecent
+            }
+            let snapshot = OmLXSnapshot(activity: activity, stats: omlxStats, recent: omlxRecent)
+            var fetched = snapshot.metrics()
+            sampled.record(fetched.hardware, fetched.live)
+            fetched.history = sampled.filling(fetched.history)
+            slots = snapshot.slots()
+            metrics = fetched
+            consecutiveFailures = 0
+            attemptsAtMax = 0
+            lastError = nil
+            lastUpdated = .now
+            polls += 1
+            if polls % healthEveryPolls == 1 || health == nil { await pollHealth() }
             status = Self.status(from: fetched, loaded: health?.loaded)
         } catch let error as StrataError {
             record(error)
@@ -293,17 +344,23 @@ public final class MetricsPoller {
             return .reading(percent: percent)
         case .generating:
             return .generating(tokS: live?.tokS)
-        case .idle, .other, .none:
+        case .other(let raw):
+            // The adapter marks a model swap as `other("loading")`: the server is up, no work runs.
+            return raw == "loading" ? .modelLoading : .idle
+        case .idle, .none:
             return .idle
         }
     }
 }
 
-/// A rolling sample of the hardware series, one point per poll, for the sparklines a server does
-/// not keep a history of. A series the server does send always wins.
+/// A rolling sample of the series, one point per poll, for the sparklines a server does not keep a
+/// history of. A series the server does send always wins. oMLX sends none at all, so the speeds
+/// come from here too, not just the hardware.
 struct SampledHistory: Sendable, Equatable {
     static let capacity = 60
 
+    private(set) var tokS: [Double] = []
+    private(set) var prefillTokSMean: [Double] = []
     private(set) var gpuUtil: [Double] = []
     private(set) var gpuMemUsed: [Double] = []
     private(set) var gpuTemp: [Double] = []
@@ -313,11 +370,13 @@ struct SampledHistory: Sendable, Equatable {
     private(set) var ramUsed: [Double] = []
     private(set) var diskReadMb: [Double] = []
 
-    mutating func record(_ hw: Hardware?) {
+    mutating func record(_ hw: Hardware?, _ live: Live? = nil) {
         func push(_ series: inout [Double], _ value: Double?) {
             series.append(value ?? 0)   // a gap draws as 0, like the server's own nulls
             if series.count > Self.capacity { series.removeFirst(series.count - Self.capacity) }
         }
+        push(&tokS, live?.tokS)
+        push(&prefillTokSMean, live?.prefillTokSMean)
         push(&gpuUtil, hw?.gpuUtil)
         push(&gpuMemUsed, hw?.gpuMemUsed)
         push(&gpuTemp, hw?.gpuTemp)
@@ -333,6 +392,8 @@ struct SampledHistory: Sendable, Equatable {
         func fill(_ keyPath: WritableKeyPath<History, [Double]?>, _ series: [Double]) {
             if out[keyPath: keyPath]?.isEmpty ?? true { out[keyPath: keyPath] = series }
         }
+        fill(\.tokS, tokS)
+        fill(\.prefillTokSMean, prefillTokSMean)
         fill(\.gpuUtil, gpuUtil)
         fill(\.gpuMemUsed, gpuMemUsed)
         fill(\.gpuTemp, gpuTemp)

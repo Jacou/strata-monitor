@@ -24,7 +24,8 @@ public struct StrataMonitorApp: App {
 
     public var body: some Scene {
         WindowGroup {
-            RootView(initialTab: AppTab.initialTab(hasAPIKey: settings.hasAPIKey))
+            // The engine this address answered last time, so a keyless oMLX server opens on the Monitor.
+            RootView(initialTab: AppTab.initialTab(hasAPIKey: settings.hasAPIKey, engine: poller.engine))
                 .environment(settings)
                 .environment(poller)
                 .environment(chat)

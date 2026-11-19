@@ -1,0 +1,42 @@
+{
+  "active_models": {
+    "models": [
+      {
+        "id": "DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp",
+        "estimated_size": 443716141626,
+        "estimated_size_formatted": "413.24GB",
+        "actual_size": 220016731544,
+        "actual_size_formatted": "204.91GB",
+        "pinned": false,
+        "is_loading": false,
+        "loading_elapsed_seconds": null,
+        "loading_estimated_seconds": null,
+        "loading_remaining_seconds_estimate": null,
+        "active_requests": 0,
+        "waiting_requests": 0,
+        "waiting": [],
+        "activities": [],
+        "prefilling": [],
+        "generating": [],
+        "request_abort": true,
+        "idle_seconds": 1.3157782554626465,
+        "ttl_remaining_seconds": null,
+        "cluster": null
+      }
+    ],
+    "model_memory_used": 222995037958,
+    "model_memory_max": 259196103072,
+    "memory_pressure": {
+      "enabled": true,
+      "current_bytes": 222995037958,
+      "soft_bytes": 246236297918,
+      "hard_bytes": 254012181010,
+      "current_formatted": "207.7GB",
+      "soft_formatted": "229.3GB",
+      "hard_formatted": "236.6GB",
+      "pressure_level": "ok"
+    },
+    "total_active_requests": 0,
+    "total_waiting_requests": 0
+  }
+}

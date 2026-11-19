@@ -59,7 +59,7 @@ extension MonitorViewModel {
                 isBusy: processing,
                 speedText: slot.state == .decoding && processing ? "\(fmt(slot.tokS, 1, locale: locale)) tok/s" : notAvailable,
                 detail: detail,
-                contextText: "\(kfmt(slot.ctxUsed ?? 0, locale: locale)) / \(kfmt(slot.nCtx, locale: locale))",
+                contextText: "\(kfmt(slot.ctxUsed, locale: locale)) / \(windowLabel(slot.nCtx, locale: locale))",
                 contextPercent: percent,
                 contextTone: percent > 90 ? .danger : (percent > 75 ? .warn : .normal),
                 draftsText: drafts
@@ -67,9 +67,16 @@ extension MonitorViewModel {
         }
         return SlotsCard(
             summary: "\(busy) of \(slots.count) busy",
-            note: slots.first?.nCtx.map { "\(kfmt($0, locale: locale)) context each" } ?? "",
+            note: slots.first?.nCtx.map { "\(windowLabel($0, locale: locale)) context each" } ?? "",
             rows: rows
         )
+    }
+
+    /// A slot's window: 262,144 reads "262k" like Basalt's page, but a 1 M window reads "1M"
+    /// rather than "1,049k".
+    private static func windowLabel(_ n: Double?, locale: Locale) -> String {
+        guard let n else { return notAvailable }
+        return n >= 1_048_576 ? ctxfmt(n, locale: locale) : kfmt(n, locale: locale)
     }
 
     // MARK: - queue

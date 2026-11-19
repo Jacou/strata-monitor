@@ -30,6 +30,13 @@ public final class ConnectionTester {
         state = .testing
         do {
             let health = try await client.health()
+            // oMLX has no `/metrics`: its live payload is `admin/api/activity`, and its resident
+            // model is in `active_models.models`, not in a `metrics.engine`.
+            if health.engine == .omlx {
+                let activity = try await client.omlxActivity()
+                state = .ok(model: activity.activeModels?.models?.first?.id ?? health.model)
+                return
+            }
             let metrics = try await client.metrics()
             state = .ok(model: metrics.engine?.model ?? health.model)
         } catch let error as StrataError {

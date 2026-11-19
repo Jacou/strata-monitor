@@ -12,6 +12,7 @@ public enum MenuBarLabel {
         case .generating(let tokS): tokS.map { "\(Int($0.rounded())) t/s" } ?? "generating"
         case .reading(let percent): percent.map { "\($0)%" } ?? "reading"
         case .queued(let count): "\(count) queued"
+        case .modelLoading: "loading"
         case .idle, .unknown, .modelUnloaded: ""
         case .unauthorized, .unreachable: notAvailable
         }
@@ -37,6 +38,7 @@ public enum MenuBarLabel {
         case .generating: "bolt.fill"
         case .queued: "hourglass"
         case .modelUnloaded: "square.stack.3d.up.slash"
+        case .modelLoading: "arrow.down.circle"
         case .unauthorized, .unreachable: "exclamationmark.triangle"
         }
     }

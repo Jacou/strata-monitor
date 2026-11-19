@@ -32,7 +32,8 @@ public enum AppTab: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// A server that needs a key is useless until the key is in, so first launch opens Settings.
-    public static func initialTab(hasAPIKey: Bool) -> AppTab {
+    /// oMLX's stats proxy needs none: once that address has answered, the app opens on the Monitor.
+    public static func initialTab(hasAPIKey: Bool, engine: ServerEngine = .strata) -> AppTab {
         #if DEBUG
         // Debug builds only: `--tab=about|monitor|settings` opens the app on that tab, which is how
         // screenshots get taken without a hand on the display.
@@ -40,6 +41,7 @@ public enum AppTab: String, CaseIterable, Identifiable, Sendable {
             if let tab = AppTab(rawValue: String(argument.dropFirst(6))) { return tab }
         }
         #endif
+        if engine == .omlx { return .monitor }
         return hasAPIKey ? .monitor : .settings
     }
 }
@@ -62,9 +64,12 @@ public struct RootView: View {
                 .tabItem { Label(AppTab.monitor.label, systemImage: AppTab.monitor.systemImage) }
                 .tag(AppTab.monitor)
 
-            ChatView()
-                .tabItem { Label(AppTab.chat.label, systemImage: AppTab.chat.systemImage) }
-                .tag(AppTab.chat)
+            // oMLX's keyless stats address serves stats only: its chat lives on the keyed port.
+            if poller.engine.hasChat {
+                ChatView()
+                    .tabItem { Label(AppTab.chat.label, systemImage: AppTab.chat.systemImage) }
+                    .tag(AppTab.chat)
+            }
 
             // Basalt has no run config to edit, so its tab goes while one is on screen.
             if poller.engine.hasRunConfig {
@@ -86,6 +91,7 @@ public struct RootView: View {
         // The server dropdown on any tab: the poller follows, and drops what the last server said.
         .onChange(of: poller.engine) { _, engine in
             if tab == .config, !engine.hasRunConfig { tab = .monitor }
+            if tab == .chat, !engine.hasChat { tab = .monitor }
         }
         .onChange(of: settings.selectedSlot) { _, _ in
             poller.switchServer(to: settings.makeClient() ?? StrataClient(baseURL: AppSettings.defaultBaseURL))

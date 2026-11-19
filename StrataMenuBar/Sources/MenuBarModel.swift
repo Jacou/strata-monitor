@@ -133,7 +133,7 @@ final class ServerMonitorModel {
     /// heaviest computation in the app, and the menu bar item's tooltip reads it on every redraw.
     /// Kept out of the observation graph — a getter must not re-invalidate the views reading it.
     @ObservationIgnored private var cachedMonitor:
-        (payload: Metrics, loaded: Bool?, slots: [Slot], model: MonitorViewModel)?
+        (payload: Metrics, loaded: Bool?, slots: [Slot], engine: ServerEngine, model: MonitorViewModel)?
 
     var monitor: MonitorViewModel? {
         guard let metrics else {
@@ -142,11 +142,13 @@ final class ServerMonitorModel {
         }
         let loaded = health?.loaded
         let slots = self.slots
-        if let cached = cachedMonitor, cached.payload == metrics, cached.loaded == loaded, cached.slots == slots {
+        let engine = self.engine
+        if let cached = cachedMonitor, cached.payload == metrics, cached.loaded == loaded,
+           cached.slots == slots, cached.engine == engine {
             return cached.model
         }
-        let model = MonitorViewModel(metrics: metrics, modelLoaded: loaded, slots: slots)
-        cachedMonitor = (metrics, loaded, slots, model)
+        let model = MonitorViewModel(metrics: metrics, modelLoaded: loaded, slots: slots, engine: engine)
+        cachedMonitor = (metrics, loaded, slots, engine, model)
         return model
     }
 

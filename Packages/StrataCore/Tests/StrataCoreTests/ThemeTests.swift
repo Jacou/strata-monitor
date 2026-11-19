@@ -8,7 +8,9 @@ final class ThemeTests: XCTestCase {
     private let light = Theme(scheme: .light)
     private let basaltDark = Theme(scheme: .dark, engine: .basalt)
     private let basaltLight = Theme(scheme: .light, engine: .basalt)
-    private var all: [Theme] { [dark, light, basaltDark, basaltLight] }
+    private let omlxDark = Theme(scheme: .dark, engine: .omlx)
+    private let omlxLight = Theme(scheme: .light, engine: .omlx)
+    private var all: [Theme] { [dark, light, basaltDark, basaltLight, omlxDark, omlxLight] }
 
     // MARK: - tokens
 
@@ -69,6 +71,24 @@ final class ThemeTests: XCTestCase {
         XCTAssertEqual(basaltLight.rawAccentText, 0xB0400F)
         XCTAssertNotEqual(basaltDark, dark)
         XCTAssertNotEqual(basaltDark.raw.warn, basaltDark.raw.accent, "a warning must not read as the accent")
+    }
+
+    /// oMLX: graphite chrome, a cool silver accent, and a deliberately *warm* idle grey so the
+    /// idle pill does not read as the accent.
+    func testOMLXTokens() {
+        XCTAssertEqual(omlxDark.raw.background, 0x0C0F12)
+        XCTAssertEqual(omlxDark.raw.accent, 0xCBD5E0)
+        XCTAssertEqual(omlxDark.raw.accentDim, 0x8E99A6)
+        XCTAssertEqual(omlxDark.raw.textSecondary, 0xA79F97)
+        XCTAssertEqual(omlxDark.rawAccentText, 0xCBD5E0)
+        XCTAssertEqual(omlxLight.raw.background, 0xF5F6F7)
+        XCTAssertEqual(omlxLight.raw.accent, 0x5A6B7D)
+        XCTAssertEqual(omlxLight.raw.textSecondary, 0x5F5B56)
+        XCTAssertEqual(omlxLight.rawAccentText, 0x39485A)
+        XCTAssertNotEqual(omlxDark, dark)
+        XCTAssertNotEqual(omlxDark, basaltDark)
+        XCTAssertNotEqual(omlxDark.raw.accent, omlxDark.raw.textSecondary,
+                          "the silver accent must not be the idle grey")
     }
 
     func testShapeTokens() {

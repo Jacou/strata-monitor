@@ -303,6 +303,7 @@ public struct QueuedRequest: Decodable, Encodable, Sendable, Equatable {
 public enum RequestFinish: Codable, Equatable, Sendable {
     case stop
     case length
+    case toolCalls
     case cancel
     case disconnect
     case error
@@ -322,6 +323,7 @@ public enum RequestFinish: Codable, Equatable, Sendable {
         switch rawValue {
         case "stop": self = .stop
         case "length": self = .length
+        case "tool_calls": self = .toolCalls
         case "cancel": self = .cancel
         case "disconnect": self = .disconnect
         case "error": self = .error
@@ -334,6 +336,7 @@ public enum RequestFinish: Codable, Equatable, Sendable {
         switch self {
         case .stop: "stop"
         case .length: "length"
+        case .toolCalls: "tool_calls"
         case .cancel: "cancel"
         case .disconnect: "disconnect"
         case .error: "error"
@@ -373,6 +376,9 @@ public struct Request: Decodable, Encodable, Identifiable, Sendable, Equatable {
     /// Basalt: the server's own id ("r_1638") and the endpoint that was called.
     public var requestID: String?
     public var path: String?
+    /// oMLX: the context this request held (prompt plus output) and the model's window.
+    public var contextUsed: Double?
+    public var maxContext: Double?
 
     public init(id: String = UUID().uuidString) { self.id = id }
 
@@ -402,6 +408,8 @@ public struct Request: Decodable, Encodable, Identifiable, Sendable, Equatable {
         projection = c.decodeBool(forKey: .projection)
         requestID = c.decodeString(forKey: .requestID)
         path = c.decodeString(forKey: .path)
+        contextUsed = c.decodeDouble(forKey: .contextUsed)
+        maxContext = c.decodeDouble(forKey: .maxContext)
         id = time.map { String($0) } ?? UUID().uuidString
     }
 
@@ -426,6 +434,8 @@ public struct Request: Decodable, Encodable, Identifiable, Sendable, Equatable {
         case fileMb = "file_mb"
         case draftsOffered = "drafts_offered"
         case draftsAccepted = "drafts_accepted"
+        case contextUsed = "context_used"
+        case maxContext = "max_context"
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -454,6 +464,8 @@ public struct Request: Decodable, Encodable, Identifiable, Sendable, Equatable {
         try c.encodeIfPresent(projection, forKey: .projection)
         try c.encodeIfPresent(requestID, forKey: .requestID)
         try c.encodeIfPresent(path, forKey: .path)
+        try c.encodeIfPresent(contextUsed, forKey: .contextUsed)
+        try c.encodeIfPresent(maxContext, forKey: .maxContext)
     }
 }
 

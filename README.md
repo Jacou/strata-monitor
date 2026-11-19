@@ -9,9 +9,10 @@ the expert and conversation caches, every recent request, and the trends across 
 - **iOS / iPadOS** — Monitor, Chat, Config, About, Settings tabs.
 - **macOS** — a menu bar item that shows the live speed, a hover card at a glance, a full popover
   on click.
-- **Strata and Basalt** — point it at either engine and the apps notice (from `/health`) and
+- **Strata, Basalt and oMLX** — point it at any engine and the apps notice (from `/health`) and
   adapt: Basalt's slots, queue, expert sources and server log, in Basalt's ember orange; Strata
-  in its blue. See [Basalt servers](#basalt-servers).
+  in its blue; oMLX's live decode and prefill, in graphite and quicksilver. See
+  [Basalt servers](#basalt-servers) and [oMLX servers](#omlx-servers).
 - No third-party packages. Swift 6, SwiftUI, iOS 18+ / macOS 15+.
 
 <p align="center">
@@ -126,6 +127,39 @@ the same app. `/health` says `"service": "basalt"`, and the apps adapt:
 
 An address pasted from Basalt's web page (`http://host:8082/#stats`) works as it is.
 
+## oMLX servers
+
+oMLX ([jundot/omlx](https://github.com/jundot/omlx), MLX on Apple Silicon) serves no `/metrics`.
+Its live state is `GET /admin/api/activity` and its lifetime totals `GET /admin/api/stats`; a
+small read-only stats proxy on `:8001` forwards those and `/health`, adds the server's API key
+server-side and strips it from the stats body, so **no key is needed**. Point the app at
+`http://<host>:8001`. `/health` carries `engine_pool`, and that is how the apps tell oMLX apart.
+
+- **Theme** — graphite chrome with a cool silver accent. The idle grey is deliberately *warm*, so
+  the Idle pill never reads as the accent. An "oMLX server" badge on every screen title.
+- **Speed tile** — decode summed across concurrent requests; prefill as the secondary number.
+  oMLX reports no GPU load, VRAM, temperature, power, PCIe or CPU counters, so the other six
+  tiles are hidden.
+- **RAM bar** — from `memory_pressure`: current bytes against the hard ceiling. Expert cache and
+  GPU temperature are hidden (oMLX reports neither).
+- **Live state** — a model swap says "Loading model" (30–100 s, `is_loading`) instead of Idle.
+- **Slots** — one row per concurrent lane: the engine's `scheduler.max_concurrent_requests`
+  (four here) is published by the proxy, busy lanes carry their state/speed/context and the idle
+  ones stay on the card. Waiting requests are not lanes; the Queue card owns them.
+- **Context ring** — the fullest in-flight request's prompt + generated against the model's
+  `model_context_length` (1 M here); when nothing runs it reads the newest finished request.
+- **Requests** — the proxy's `/admin/api/recent` journal, read from the server's own
+  `Chat completion:` log line: finish reason, prompt/output tokens, duration, speed, TTFT and
+  context used/window, newest first, followed by whatever is in flight.
+- **Session** — from `stats`: uptime, totals, lifetime averages. The conversation-cache card is hidden.
+- **Chat, Config and the server log are hidden** — the keyless stats address serves stats only.
+- **Cost** — 891 bytes per activity poll, 6 KB of stats every 30th tick and the recent journal
+  (about 6 KB) every 5th tick: still about 130 MB/day at a 1 s cadence, against ~1.1 GB/day for a
+  Strata `/metrics` at the same rate. Measured on an M5 Ultra: polling at 5 Hz left decode
+  throughput unchanged (107.8 vs 119.9 tok/s, run-to-run variance only).
+- **Proxy and dashboard** — both live in `tools/omlx-stats/`: the keyless service and the page it
+  serves at `/`; see that folder's README for deployment.
+
 ## Build
 
 Requires Xcode 16+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
@@ -162,6 +196,10 @@ Open **Settings** (the app starts there until a key is saved), enter the server 
 (`http://<host>:8081` by default for Strata) and the API key from Strata's config, tap **Test
 connection**, then **Save**. The key goes into the Keychain and is sent only as a `Bearer` header
 to that address. The Mac app has the same fields in its Settings window.
+
+For oMLX, enter `http://<host>:8001` (the stats proxy) and leave the key empty: the proxy holds
+it server-side. Pointing at oMLX's own `:8000` with the key also works for stats; the app never
+models the `api_key` field that body carries, so it is dropped at decode.
 
 The iOS app polls while it is in the foreground and stops in the background; the Mac app polls
 continuously at the rate you choose.

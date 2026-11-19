@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The "Mission control" palette: dark-first, glowing cyan for Strata, ember orange for Basalt.
+/// The "Mission control" palette: dark-first, glowing cyan for Strata, ember orange for Basalt,
+/// graphite and quicksilver for oMLX.
 ///
 /// Every colour the app draws comes from here — the hex literals in this file are the only ones
 /// in the project. A `Theme` is resolved once per colour scheme and injected through
@@ -189,6 +190,34 @@ public struct Theme: Sendable, Equatable {
                 separatorAlpha: dark ? 0.06 : 0.07
             )
             text = dark ? (0xFF7A3D, 0xE9C341, 0xF25F7E) : (0xB0400F, 0x7F6400, 0xC8324F)
+        case .omlx:
+            // Graphite chrome with a cool silver accent. A pure-grey accent would read as the idle
+            // state (idle is `textSecondary`), so the accent is cool while the idle/secondary grey
+            // is warm: the two separate by hue as well as by brightness. Light keeps the same
+            // pairing on a neutral off-white, and every text pair still clears 4.5:1.
+            self.raw = Raw(
+                background: dark ? 0x0C0F12 : 0xF5F6F7,
+                headerGlow: dark ? 0x9FB0C4 : 0x6E7C8C,
+                headerGlowAlpha: dark ? 0.16 : 0.10,
+                cardTop: dark ? 0x161A1F : 0xFFFFFF,
+                cardBottom: dark ? 0x101418 : 0xFFFFFF,
+                cardOpacity: dark ? 0.92 : 1,
+                cardBorder: dark ? 0xC3CFDB : 0x5B6B7C,
+                cardBorderAlpha: dark ? 0.12 : 0.16,
+                cardHighlightAlpha: dark ? 0.04 : 0.03,
+                textPrimary: dark ? 0xE7ECF1 : 0x12161A,
+                // Warm graphite: the idle pill's grey, deliberately apart from the silver accent.
+                textSecondary: dark ? 0xA79F97 : 0x5F5B56,
+                textTertiary: dark ? 0x8B8580 : 0x5A656E,
+                accent: dark ? 0xCBD5E0 : 0x5A6B7D,
+                accentDim: dark ? 0x8E99A6 : 0x3E4C5C,
+                warn: dark ? 0xE2B457 : 0xB8860B,
+                danger: dark ? 0xFF6F86 : 0xC8324F,
+                track: dark ? 0x1D2228 : 0xE6E8EB,
+                separatorBase: dark ? 0xFFFFFF : 0x000000,
+                separatorAlpha: dark ? 0.06 : 0.07
+            )
+            text = dark ? (0xCBD5E0, 0xE2B457, 0xFF6F86) : (0x39485A, 0x8A5F00, 0xC8324F)
         }
 
         self.background = Color(hex: raw.background)
@@ -255,7 +284,7 @@ extension MonitorStatus {
     public func color(in theme: Theme) -> Color {
         switch self {
         case .unknown, .idle, .modelUnloaded: theme.textSecondary
-        case .reading, .generating: theme.accentText
+        case .reading, .generating, .modelLoading: theme.accentText
         case .queued: theme.warnText
         case .unauthorized, .unreachable: theme.dangerText
         }

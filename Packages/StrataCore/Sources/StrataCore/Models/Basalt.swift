@@ -5,6 +5,7 @@ import Foundation
 public enum ServerEngine: String, Sendable, Equatable {
     case strata
     case basalt
+    case omlx
 
     /// From `/health`'s `service`. Anything that is not Basalt is treated as Strata, which is
     /// what every server said before the field mattered.
@@ -16,6 +17,7 @@ public enum ServerEngine: String, Sendable, Equatable {
         switch self {
         case .strata: "Strata"
         case .basalt: "Basalt"
+        case .omlx: "oMLX"
         }
     }
 
@@ -24,10 +26,24 @@ public enum ServerEngine: String, Sendable, Equatable {
 
     /// `GET /api/logs` exists.
     public var hasLogs: Bool { self == .basalt }
+
+    /// `POST /v1/chat/completions` is reachable from the address the app polls. oMLX serves it on
+    /// `:8000` behind a key, while the keyless stats proxy on `:8001` forwards stats only, so the
+    /// Chat tab goes for an oMLX server.
+    public var hasChat: Bool { self != .omlx }
+
+    /// The six hardware tiles need GPU load, VRAM, temperature, power, PCIe and CPU/disk counters.
+    /// oMLX reports none of them (its `device-info` has a chip name and core count, at 47 ms a call).
+    public var hasHardware: Bool { self != .omlx }
 }
 
 extension Health {
-    public var engine: ServerEngine { ServerEngine(service: service) }
+    public var engine: ServerEngine {
+        // Basalt names itself; oMLX carries an `engine_pool` and no `service`; anything else is Strata.
+        if service?.lowercased() == "basalt" { return .basalt }
+        if enginePool != nil { return .omlx }
+        return .strata
+    }
 }
 
 // MARK: - /slots

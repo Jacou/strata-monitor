@@ -33,6 +33,12 @@ public struct Keychain: Sendable {
     }
 
     public func get(_ account: String) -> String? {
+        #if DEBUG
+        // A rebuilt ad-hoc app carries a new signature, so the Keychain asks for the login password
+        // on every launch. `open --env STRATA_SKIP_KEYCHAIN=1 …` keeps a dev launch prompt-free;
+        // release builds never see this branch.
+        if ProcessInfo.processInfo.environment["STRATA_SKIP_KEYCHAIN"] == "1" { return nil }
+        #endif
         var query = baseQuery(account)
         query[kSecReturnData as String] = kCFBooleanTrue
         query[kSecMatchLimit as String] = kSecMatchLimitOne

@@ -84,7 +84,8 @@ struct MenuBarPopover: View {
                 context: monitor.context,
                 experts: monitor.experts,
                 ram: monitor.ram,
-                temp: monitor.temp
+                temp: monitor.temp,
+                showsEngineBars: monitor.showsEngineBars
             )
             if model.engine == .basalt, let sources = monitor.expertSources {
                 ExpertSourcesCardView(sources: sources)

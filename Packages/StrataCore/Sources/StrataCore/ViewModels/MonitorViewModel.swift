@@ -156,6 +156,8 @@ public struct MonitorViewModel: Sendable, Equatable {
     public var experts: Bar
     public var ram: Bar
     public var temp: Bar
+    /// oMLX reports no expert cache or GPU temperature: the Resources card draws context and RAM.
+    public var showsEngineBars: Bool
     /// nil when the server is too old to report it — the card is hidden.
     public var convCache: ConvCache?
     public var requests: [RequestRow]
@@ -183,7 +185,8 @@ public struct MonitorViewModel: Sendable, Equatable {
         allRequests: Bool = false,
         fullRequests: [Request]? = nil,
         modelLoaded: Bool? = nil,
-        slots: [Slot] = []
+        slots: [Slot] = [],
+        engine: ServerEngine = .strata
     ) {
         let live = metrics.live
         let hw = metrics.hardware
@@ -203,10 +206,17 @@ public struct MonitorViewModel: Sendable, Equatable {
         // first reads its prompt must come from the slots themselves.
         let busy = live?.isMultiSlot == true ? slots.filter { $0.isProcessing == true } : []
         self.live = Self.liveCard(live: live, last: last, modelLoaded: modelLoaded, busy: busy, locale: locale)
-        self.metrics = Self.metricTiles(
+        var tiles = Self.metricTiles(
             live: live, hw: hw, st: st, eng: eng, history: history, last: last, busy: busy, locale: locale
         )
-        self.context = Self.contextInfo(live: live, eng: eng, last: last, slots: slots, locale: locale)
+        // oMLX reports no GPU, thermal, power, PCIe or CPU counters: only Speed has a value.
+        if !engine.hasHardware { tiles = tiles.filter { $0.kind == .speed } }
+        self.metrics = tiles
+        self.showsEngineBars = engine.hasHardware
+        self.context = Self.contextInfo(
+            live: live, eng: eng, last: last, slots: slots,
+            prefersSlots: true, locale: locale
+        )
         self.slots = Self.slotsCard(live: live, slots: slots, locale: locale)
         self.queue = Self.queueCard(live: live, locale: locale)
         self.expertSources = Self.expertSources(last, locale: locale)
@@ -270,6 +280,8 @@ public struct MonitorViewModel: Sendable, Equatable {
                 percent: percent,
                 tone: .normal
             )
+        case .other(let raw) where raw == "loading":
+            return LiveCard(label: "Loading model", detail: "swapping a model in", percent: 0, tone: .info)
         case .idle, .other, .none:
             // /health says the weights are not resident: the first request has to load them.
             if modelLoaded == false {
@@ -460,9 +472,15 @@ public struct MonitorViewModel: Sendable, Equatable {
 
     // MARK: - context ring, expert cache, RAM, temperature
 
-    private static func contextInfo(live: Live?, eng: Engine?, last: Request?, slots: [Slot], locale: Locale) -> Context {
-        // Several slots: each has its own window, so the ring shows the fullest one.
-        let busiest = slots.filter { $0.isProcessing == true }.max { ($0.ctxUsed ?? 0) < ($1.ctxUsed ?? 0) }
+    private static func contextInfo(
+        live: Live?, eng: Engine?, last: Request?, slots: [Slot],
+        prefersSlots: Bool = true, locale: Locale
+    ) -> Context {
+        // Several slots: each has its own window, so the ring shows the fullest one. oMLX has no
+        // slot numbering (its rows are just the in-flight requests), so its ring follows one request.
+        let busiest = prefersSlots
+            ? slots.filter { $0.isProcessing == true }.max { ($0.ctxUsed ?? 0) < ($1.ctxUsed ?? 0) }
+            : nil
         if let busiest, let used = busiest.ctxUsed, let max = busiest.nCtx ?? eng?.maxContext, max > 0 {
             let fraction = min(1, used / max)
             return Context(
@@ -637,10 +655,22 @@ public struct MonitorViewModel: Sendable, Equatable {
             Fact(key: "Finish", value: finishText),
             Fact(key: "Duration", value: request.durationS.map { "\(fmt($0, 1, locale: locale)) s" } ?? notAvailable),
             Fact(key: "Prompt", value: fmt(prompt, 0, locale: locale)),
-            Fact(key: "Reused", value: "\(fmt(reused, 0, locale: locale)) (\(fmt((100 * reused) / max(prompt, 1), 1, locale: locale))%)"),
-            Fact(key: "Read", value: fmt(read, 0, locale: locale)),
-            Fact(key: "Output", value: fmt(request.outputTokens, 0, locale: locale)),
         ]
+        // Basalt reports what the cache saved; oMLX's journal does not, so those rows stay out
+        // rather than claiming a 0 % reuse.
+        if request.reused != nil {
+            facts.append(Fact(key: "Reused", value: "\(fmt(reused, 0, locale: locale)) (\(fmt((100 * reused) / max(prompt, 1), 1, locale: locale))%)"))
+            facts.append(Fact(key: "Read", value: fmt(read, 0, locale: locale)))
+        }
+        facts.append(Fact(key: "Output", value: fmt(request.outputTokens, 0, locale: locale)))
+        if let used = request.contextUsed {
+            let window = request.maxContext
+            facts.append(Fact(
+                key: "Context",
+                value: window.map { "\(kfmt(used, locale: locale)) / \(ctxfmt($0, locale: locale))" }
+                    ?? kfmt(used, locale: locale)
+            ))
+        }
 
         if let promptMs = request.promptMs, promptMs > 0 {
             let speed = read > 0 ? " · \(fmt(read / (promptMs / 1000), 0, locale: locale)) tok/s" : ""
@@ -706,6 +736,7 @@ public struct MonitorViewModel: Sendable, Equatable {
     private static func badge(for finish: RequestFinish?) -> (String, BadgeStyle) {
         switch finish {
         case .stop: ("Done", .neutral)
+        case .toolCalls: ("Tool calls", .neutral)
         case .length: ("Max tokens", .neutral)
         case .cancel: ("Stopped", .warning)
         case .disconnect: ("Closed", .warning)

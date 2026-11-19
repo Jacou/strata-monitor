@@ -1,0 +1,11 @@
+{
+  "status": "healthy",
+  "default_model": "GLM-5.3-Flash-oQ4e-mtp",
+  "engine_pool": {
+    "model_count": 4,
+    "loaded_count": 1,
+    "final_ceiling": 259199920592,
+    "current_model_memory": 230853478667
+  },
+  "mcp": null
+}

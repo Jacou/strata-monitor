@@ -33,6 +33,9 @@ public struct EngineBadge: View {
                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
         case .strata:
             Image(systemName: "square.stack.3d.up.fill")
+        case .omlx:
+            // oMLX runs MLX on Apple Silicon: a memory chip is the mark it reads by.
+            Image(systemName: "memorychip")
         }
     }
 }

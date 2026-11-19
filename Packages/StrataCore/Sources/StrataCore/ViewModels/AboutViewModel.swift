@@ -55,7 +55,7 @@ public struct AboutViewModel: Equatable, Sendable {
             engine.append(AboutFact(label: "Model", value: model))
         }
         let version = eng?.version.map { $0.isEmpty ? "built from source" : "v\($0)" } ?? "built from source"
-        engine.append(AboutFact(label: "Engine", value: kind == .basalt ? "Basalt \(version)" : version))
+        engine.append(AboutFact(label: "Engine", value: kind == .strata ? version : "\(kind.name) \(version)"))
         if let quant = eng?.quant, !quant.isEmpty {
             engine.append(AboutFact(label: "Weights", value: quant))
         }

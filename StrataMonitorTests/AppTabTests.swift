@@ -8,6 +8,13 @@ final class AppTabTests: XCTestCase {
         XCTAssertEqual(AppTab.initialTab(hasAPIKey: true), .monitor)
     }
 
+    /// A keyless oMLX server is usable straight away, so it opens on the Monitor, not Settings.
+    func testKeylessOMLXOpensMonitor() {
+        XCTAssertEqual(AppTab.initialTab(hasAPIKey: false, engine: .omlx), .monitor)
+        XCTAssertEqual(AppTab.initialTab(hasAPIKey: true, engine: .omlx), .monitor)
+        XCTAssertEqual(AppTab.initialTab(hasAPIKey: false, engine: .basalt), .settings)
+    }
+
     func testTabsHaveIcons() {
         XCTAssertEqual(AppTab.monitor.systemImage, "waveform.path.ecg")
         XCTAssertEqual(AppTab.chat.systemImage, "bubble.left.and.text.bubble.right")

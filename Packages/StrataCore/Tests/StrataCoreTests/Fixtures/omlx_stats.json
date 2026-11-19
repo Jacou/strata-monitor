@@ -1,0 +1,316 @@
+{
+  "total_tokens_served": 2198562,
+  "total_cached_tokens": 2131262,
+  "cache_efficiency": 97.7,
+  "total_prompt_tokens": 2180939,
+  "total_completion_tokens": 17623,
+  "total_requests": 16,
+  "avg_prefill_tps": 1215.4,
+  "avg_generation_tps": 67.1,
+  "uptime_seconds": 493.5,
+  "host": "0.0.0.0",
+  "port": 8000,
+  "cli_prefix": "/Applications/oMLX.app/Contents/MacOS/omlx-cli",
+  "engines": {
+    "mlx": {
+      "name": "mlx",
+      "version": "0.32.4",
+      "commit": null,
+      "url": null
+    },
+    "mlx-lm": {
+      "name": "mlx-lm",
+      "version": "0.32.3.dev8+g0d4d3d04f",
+      "commit": "0d4d3d04f8ab7ce4a51e7209e8615755a48ba94d",
+      "url": "https://github.com/ml-explore/mlx-lm/commit/0d4d3d04f8ab7ce4a51e7209e8615755a48ba94d"
+    },
+    "mlx-vlm": {
+      "name": "mlx-vlm",
+      "version": "0.7.11",
+      "commit": "138d7617d39653b39a5cbc379b1b5907a4481d67",
+      "url": "https://github.com/Neywa-Labs/mlx-vlm/commit/138d7617d39653b39a5cbc379b1b5907a4481d67"
+    },
+    "mlx-embeddings": {
+      "name": "mlx-embeddings",
+      "version": "0.1.0",
+      "commit": "32981fa4e8064ed664b52071789dd18271fe4206",
+      "url": "https://github.com/Blaizzy/mlx-embeddings/commit/32981fa4e8064ed664b52071789dd18271fe4206"
+    },
+    "mlx-audio": {
+      "name": "mlx-audio",
+      "version": "0.6.3",
+      "commit": "8c244a1faff44cfa69e3151c195f52a4c1c90be5",
+      "url": "https://github.com/Neywa-Labs/mlx-audio/commit/8c244a1faff44cfa69e3151c195f52a4c1c90be5"
+    }
+  },
+  "active_models": {
+    "models": [
+      {
+        "id": "DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp",
+        "estimated_size": 443716141626,
+        "estimated_size_formatted": "413.24GB",
+        "actual_size": 220016731544,
+        "actual_size_formatted": "204.91GB",
+        "pinned": false,
+        "is_loading": false,
+        "loading_elapsed_seconds": null,
+        "loading_estimated_seconds": null,
+        "loading_remaining_seconds_estimate": null,
+        "active_requests": 4,
+        "waiting_requests": 2,
+        "waiting": [
+          {
+            "request_id": "0363a48e-434a-45fa-8d84-65fddf12257c",
+            "queue_position": 1,
+            "elapsed_seconds": 25.11601958299798,
+            "prompt_tokens": 2141
+          },
+          {
+            "request_id": "e6ccb241-9d25-4966-ba85-f3242da7a71c",
+            "queue_position": 2,
+            "elapsed_seconds": 25.112693791998026,
+            "prompt_tokens": 2141
+          }
+        ],
+        "activities": [],
+        "prefilling": [],
+        "generating": [
+          {
+            "request_id": "1159e834-cf37-4313-aa82-4445cea4ee52",
+            "elapsed_seconds": 19.010974082997564,
+            "generated_tokens": 447,
+            "tokens_per_second": 24.674357014214515,
+            "last_activity_age_seconds": 0.009523082997475285,
+            "prompt_tokens": 2141,
+            "max_tokens": 900
+          },
+          {
+            "request_id": "7659826e-35e6-4105-b07b-e376e2f7adbe",
+            "elapsed_seconds": 19.75125808300072,
+            "generated_tokens": 449,
+            "tokens_per_second": 24.674357014214515,
+            "last_activity_age_seconds": 0.009523082997475285,
+            "prompt_tokens": 2141,
+            "max_tokens": 900
+          },
+          {
+            "request_id": "8f7b9fca-8818-482d-9c0a-3ffa1d27b0a2",
+            "elapsed_seconds": 23.969281957997737,
+            "generated_tokens": 489,
+            "tokens_per_second": 24.674357014214515,
+            "last_activity_age_seconds": 0.009523082997475285,
+            "prompt_tokens": 2141,
+            "max_tokens": 900
+          },
+          {
+            "request_id": "c0e921fa-5ab6-4f94-ab87-f44124352320",
+            "elapsed_seconds": 21.31089479200091,
+            "generated_tokens": 467,
+            "tokens_per_second": 24.674357014214515,
+            "last_activity_age_seconds": 0.009523082997475285,
+            "prompt_tokens": 2141,
+            "max_tokens": 900
+          }
+        ],
+        "request_abort": true,
+        "idle_seconds": 0.0,
+        "ttl_remaining_seconds": null,
+        "cluster": null
+      }
+    ],
+    "model_memory_used": 223459813840,
+    "model_memory_max": 259199871440,
+    "memory_pressure": {
+      "enabled": true,
+      "current_bytes": 223459813840,
+      "soft_bytes": 246239877868,
+      "hard_bytes": 254015874011,
+      "current_formatted": "208.1GB",
+      "soft_formatted": "229.3GB",
+      "hard_formatted": "236.6GB",
+      "pressure_level": "ok"
+    },
+    "total_active_requests": 4,
+    "total_waiting_requests": 2
+  },
+  "runtime_cache": {
+    "base_path": "/Users/jacou/.omlx",
+    "ssd_cache_dir": "/Users/jacou/.omlx/cache",
+    "ssd_cache_unavailable": false,
+    "response_state_dir": "/Users/jacou/.omlx/cache/response-state",
+    "models": [
+      {
+        "id": "DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp",
+        "block_size": 8192,
+        "indexed_blocks": 21,
+        "indexed_blocks_display": "21",
+        "has_sub_block_cache": false,
+        "partial_block_skips": 0,
+        "partial_tokens_skipped": 0,
+        "last_partial_tokens_skipped": 0,
+        "last_tokens_to_next_block": 0,
+        "num_files": 91,
+        "total_size_bytes": 1208597832,
+        "max_size_bytes": 85899345920,
+        "hot_cache_max_bytes": 0,
+        "hot_cache_size_bytes": 0,
+        "hot_cache_entries": 0,
+        "gdn_checkpoint_loads": 0,
+        "gdn_checkpoint_walkbacks": 0,
+        "gdn_last_restore": null,
+        "gdn_staging": {
+          "pending_bytes": 0,
+          "pending_peak_bytes": 9996900,
+          "backpressure_ms": 0.009874987881630659,
+          "state_dtype": "fp32",
+          "state_dequantizations": 0,
+          "encode_failures": 0,
+          "decode_failures": 0,
+          "capability_fallbacks": 0,
+          "legacy_fp32_fallbacks": 0,
+          "sidecar_count": 0,
+          "sidecar_size_bytes": 0
+        },
+        "boundary_snapshots": {
+          "capture_attempts": 7,
+          "captures": 7,
+          "captures_ssd": 7,
+          "captures_memory": 0,
+          "ssd_fallbacks": 0,
+          "override_attempts": 2,
+          "override_hits": 2,
+          "override_misses": 0,
+          "store_skips": 0,
+          "reasons": {},
+          "last_event": {
+            "event": "capture_success",
+            "request_id": "1159e834-cf37-4313-aa82-4445cea4ee52",
+            "token_count": 2139,
+            "block_size": 8192,
+            "source": "prefill_tail",
+            "storage": "ssd"
+          }
+        },
+        "last_prefix_lookup": {
+          "request_id": "1159e834-cf37-4313-aa82-4445cea4ee52",
+          "prompt_tokens": 2141,
+          "reused_kv_tokens": 0,
+          "reprefill_tokens": 2141,
+          "block_size": 8192,
+          "matched_blocks": 0,
+          "reason": "closest_recent_store",
+          "closest_request_id": "70c72998-93ea-42c4-8edc-1a0c9acd5e92",
+          "common_prefix_tokens": 27,
+          "comparable_tokens": 2141,
+          "unreused_common_prefix_tokens": 27
+        },
+        "hits": 38,
+        "misses": 0,
+        "evictions": 0,
+        "saves": 2,
+        "saves_persisted": 2,
+        "loads": 38,
+        "errors": 0,
+        "ssd_write_drops": 0,
+        "ssd_inline_write_fallbacks": 0,
+        "evict_unlink_failures": 0,
+        "hot_cache_hits": 0,
+        "hot_cache_evictions": 0,
+        "hot_cache_promotions": 0,
+        "hot_cache_promotion_failures": 0,
+        "cache_rates": {
+          "windows": {
+            "1m": {
+              "prefix_hit_rate": 0.2,
+              "prefix_hits": 1,
+              "prefix_misses": 4,
+              "prefix_match_efficiency": 0.9388,
+              "evictions": 0,
+              "eviction_rate_per_min": 0.0,
+              "ssd_hot_hits": 0,
+              "ssd_disk_loads": 19,
+              "ssd_hot_rate": 0.0,
+              "target_static_hits": 0,
+              "target_static_misses": 0,
+              "target_static_hit_rate": 0.0,
+              "target_static_tokens_restored": 0,
+              "draft_prefix_hits": 0,
+              "draft_prefix_misses": 0,
+              "draft_prefix_hit_rate": 0.0,
+              "draft_prefix_tokens_saved": 0
+            },
+            "5m": {
+              "prefix_hit_rate": 0.2,
+              "prefix_hits": 1,
+              "prefix_misses": 4,
+              "prefix_match_efficiency": 0.9388,
+              "evictions": 0,
+              "eviction_rate_per_min": 0.0,
+              "ssd_hot_hits": 0,
+              "ssd_disk_loads": 19,
+              "ssd_hot_rate": 0.0,
+              "target_static_hits": 0,
+              "target_static_misses": 0,
+              "target_static_hit_rate": 0.0,
+              "target_static_tokens_restored": 0,
+              "draft_prefix_hits": 0,
+              "draft_prefix_misses": 0,
+              "draft_prefix_hit_rate": 0.0,
+              "draft_prefix_tokens_saved": 0
+            },
+            "15m": {
+              "prefix_hit_rate": 0.2,
+              "prefix_hits": 1,
+              "prefix_misses": 4,
+              "prefix_match_efficiency": 0.9388,
+              "evictions": 0,
+              "eviction_rate_per_min": 0.0,
+              "ssd_hot_hits": 0,
+              "ssd_disk_loads": 19,
+              "ssd_hot_rate": 0.0,
+              "target_static_hits": 0,
+              "target_static_misses": 0,
+              "target_static_hit_rate": 0.0,
+              "target_static_tokens_restored": 0,
+              "draft_prefix_hits": 0,
+              "draft_prefix_misses": 0,
+              "draft_prefix_hit_rate": 0.0,
+              "draft_prefix_tokens_saved": 0
+            }
+          },
+          "cumulative": {
+            "prefix_hits": 2,
+            "prefix_misses": 4,
+            "prefix_hit_rate": 0.3333,
+            "prefix_tokens_saved": 307257,
+            "prefix_match_efficiency": 0.9655,
+            "evictions": 0,
+            "ssd_hot_hits": 0,
+            "ssd_disk_loads": 38,
+            "ssd_saves": 2,
+            "hot_cache_evictions": 0,
+            "hot_cache_promotions": 0,
+            "ssd_hot_rate": 0.0,
+            "target_static_hits": 0,
+            "target_static_misses": 0,
+            "target_static_hit_rate": 0.0,
+            "target_static_tokens_restored": 0,
+            "draft_prefix_hits": 0,
+            "draft_prefix_misses": 0,
+            "draft_prefix_hit_rate": 0.0,
+            "draft_prefix_tokens_saved": 0
+          }
+        }
+      }
+    ],
+    "total_num_files": 96,
+    "total_size_bytes": 9548740968,
+    "effective_block_sizes": [
+      8192
+    ],
+    "disk_max_bytes": 85899345920,
+    "hot_cache_max_bytes": 0,
+    "hot_cache_size_bytes": 0,
+    "hot_cache_entries": 0
+  }
+}

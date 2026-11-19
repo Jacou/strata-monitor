@@ -54,6 +54,7 @@ final class FormatTests: XCTestCase {
     func testCtxfmt() {
         XCTAssertEqual(ctxfmt(32_768, locale: locale), "32K")
         XCTAssertEqual(ctxfmt(262_144, locale: locale), "256K")
+        XCTAssertEqual(ctxfmt(1_048_576, locale: locale), "1M")
         XCTAssertEqual(ctxfmt(4_096, locale: locale), "4K")
         XCTAssertEqual(ctxfmt(1_536, locale: locale), "1.5k")
         XCTAssertEqual(ctxfmt(1_500, locale: locale), "1.5k")

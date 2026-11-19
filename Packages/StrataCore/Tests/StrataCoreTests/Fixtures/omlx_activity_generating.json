@@ -1,0 +1,105 @@
+{
+  "active_models": {
+    "models": [
+      {
+        "id": "DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp",
+        "estimated_size": 443716141626,
+        "estimated_size_formatted": "413.24GB",
+        "actual_size": 220016731544,
+        "actual_size_formatted": "204.91GB",
+        "pinned": false,
+        "is_loading": false,
+        "loading_elapsed_seconds": null,
+        "loading_estimated_seconds": null,
+        "loading_remaining_seconds_estimate": null,
+        "active_requests": 4,
+        "waiting_requests": 3,
+        "waiting": [
+          {
+            "request_id": "1159e834-cf37-4313-aa82-4445cea4ee52",
+            "queue_position": 1,
+            "elapsed_seconds": 4.507908957999462,
+            "prompt_tokens": 2141
+          },
+          {
+            "request_id": "0363a48e-434a-45fa-8d84-65fddf12257c",
+            "queue_position": 2,
+            "elapsed_seconds": 4.504270790999726,
+            "prompt_tokens": 2141
+          },
+          {
+            "request_id": "e6ccb241-9d25-4966-ba85-f3242da7a71c",
+            "queue_position": 3,
+            "elapsed_seconds": 4.500944999999774,
+            "prompt_tokens": 2141
+          }
+        ],
+        "activities": [],
+        "prefilling": [
+          {
+            "request_id": "7659826e-35e6-4105-b07b-e376e2f7adbe",
+            "processed": 1472,
+            "total": 2140,
+            "speed": 0.0,
+            "eta": null,
+            "elapsed": 1.6,
+            "phase": "prefill",
+            "detail": null,
+            "prompt_tokens": 2141,
+            "cached_tokens": 0
+          },
+          {
+            "request_id": "1159e834-cf37-4313-aa82-4445cea4ee52",
+            "processed": 1472,
+            "total": 2140,
+            "speed": 0.0,
+            "eta": null,
+            "elapsed": 0.0,
+            "phase": "prefill",
+            "detail": null,
+            "prompt_tokens": 2141,
+            "cached_tokens": 0
+          }
+        ],
+        "generating": [
+          {
+            "request_id": "8f7b9fca-8818-482d-9c0a-3ffa1d27b0a2",
+            "elapsed_seconds": 3.3575331659994845,
+            "generated_tokens": 34,
+            "tokens_per_second": 10.12648224723604,
+            "last_activity_age_seconds": 0.5293105000018841,
+            "prompt_tokens": 2141,
+            "max_tokens": 900
+          },
+          {
+            "request_id": "c0e921fa-5ab6-4f94-ab87-f44124352320",
+            "elapsed_seconds": 0.6991460000026564,
+            "generated_tokens": 4,
+            "tokens_per_second": 5.721265658367211,
+            "last_activity_age_seconds": 0.5293105000018841,
+            "prompt_tokens": 2141,
+            "max_tokens": 900
+          }
+        ],
+        "request_abort": true,
+        "idle_seconds": 0.0,
+        "ttl_remaining_seconds": null,
+        "cluster": null
+      }
+    ],
+    "model_memory_used": 225505386705,
+    "model_memory_max": 259198708152,
+    "memory_pressure": {
+      "enabled": true,
+      "current_bytes": 225505386705,
+      "soft_bytes": 246238772744,
+      "hard_bytes": 254014733988,
+      "current_formatted": "210.0GB",
+      "soft_formatted": "229.3GB",
+      "hard_formatted": "236.6GB",
+      "pressure_level": "ok"
+    },
+    "total_active_requests": 4,
+    "total_waiting_requests": 3
+  }
+}

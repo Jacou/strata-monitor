@@ -91,6 +91,26 @@ public struct StrataClient: Sendable {
         try await get(path: "api/logs", query: [URLQueryItem(name: "after", value: String(after))], as: LogBatch.self)
     }
 
+    // MARK: - oMLX
+
+    /// oMLX has no `/metrics`. The stats proxy on `:8001` forwards its live payload instead; it
+    /// needs no API key, so the client sends none.
+    public func omlxActivity() async throws -> OmLXActivity {
+        try await get(path: "admin/api/activity", query: [], as: OmLXActivity.self)
+    }
+
+    /// oMLX's lifetime counters (`admin/api/stats`). The proxy strips the server's own `api_key`
+    /// from this body before forwarding it; nothing here models that field.
+    public func omlxStats() async throws -> OmLXStats {
+        try await get(path: "admin/api/stats", query: [], as: OmLXStats.self)
+    }
+
+    /// The proxy's journal of finished requests (`admin/api/recent`), read from oMLX's server log.
+    /// It carries each request's tokens, duration, speed, finish reason and context used/window.
+    public func omlxRecent() async throws -> OmLXRecent {
+        try await get(path: "admin/api/recent", query: [], as: OmLXRecent.self)
+    }
+
     /// `GET /config`: the run-config keys this server will edit. 404 when it has no run config.
     public func config() async throws -> ConfigResponse {
         try await get(path: "config", query: [], as: ConfigResponse.self)
