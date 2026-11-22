@@ -8,9 +8,9 @@ final class AppTabTests: XCTestCase {
         XCTAssertEqual(AppTab.initialTab(hasAPIKey: true), .monitor)
     }
 
-    /// A keyless oMLX server is usable straight away, so it opens on the Monitor, not Settings.
-    func testKeylessOMLXOpensMonitor() {
-        XCTAssertEqual(AppTab.initialTab(hasAPIKey: false, engine: .omlx), .monitor)
+    /// oMLX's admin API wants the main key like any other server: without one, Settings first.
+    func testOMLXNeedsAKeyLikeTheOthers() {
+        XCTAssertEqual(AppTab.initialTab(hasAPIKey: false, engine: .omlx), .settings)
         XCTAssertEqual(AppTab.initialTab(hasAPIKey: true, engine: .omlx), .monitor)
         XCTAssertEqual(AppTab.initialTab(hasAPIKey: false, engine: .basalt), .settings)
     }

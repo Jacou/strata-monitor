@@ -11,7 +11,7 @@ the expert and conversation caches, every recent request, and the trends across 
   on click.
 - **Strata, Basalt and oMLX** — point it at any engine and the apps notice (from `/health`) and
   adapt: Basalt's slots, queue, expert sources and server log, in Basalt's ember orange; Strata
-  in its blue; oMLX's live decode and prefill, in graphite and quicksilver. See
+  in its blue; oMLX's models, queue, serving totals, usage and caches, in graphite and quicksilver. See
   [Basalt servers](#basalt-servers) and [oMLX servers](#omlx-servers).
 - No third-party packages. Swift 6, SwiftUI, iOS 18+ / macOS 15+.
 
@@ -129,36 +129,48 @@ An address pasted from Basalt's web page (`http://host:8082/#stats`) works as it
 
 ## oMLX servers
 
-oMLX ([jundot/omlx](https://github.com/jundot/omlx), MLX on Apple Silicon) serves no `/metrics`.
-Its live state is `GET /admin/api/activity` and its lifetime totals `GET /admin/api/stats`; a
-small read-only stats proxy on `:8001` forwards those and `/health`, adds the server's API key
-server-side and strips it from the stats body, so **no key is needed**. Point the app at
-`http://<host>:8001`. `/health` carries `engine_pool`, and that is how the apps tell oMLX apart.
+oMLX ([jundot/omlx](https://github.com/jundot/omlx), MLX on Apple Silicon) serves no `/metrics`, so
+the apps read its admin API directly, on the same port as `/v1` (`:8000` by default), with the
+server's **main** API key as a Bearer token (sub-keys are refused there). No proxy is involved.
+`/health` needs no key and carries `engine_pool`, which is how the apps tell oMLX apart.
 
-- **Theme** — graphite chrome with a cool silver accent. The idle grey is deliberately *warm*, so
-  the Idle pill never reads as the accent. An "oMLX server" badge on every screen title.
-- **Speed tile** — decode summed across concurrent requests; prefill as the secondary number.
-  oMLX reports no GPU load, VRAM, temperature, power, PCIe or CPU counters, so the other six
-  tiles are hidden.
-- **RAM bar** — from `memory_pressure`: current bytes against the hard ceiling. Expert cache and
-  GPU temperature are hidden (oMLX reports neither).
-- **Live state** — a model swap says "Loading model" (30–100 s, `is_loading`) instead of Idle.
-- **Slots** — one row per concurrent lane: the engine's `scheduler.max_concurrent_requests`
-  (four here) is published by the proxy, busy lanes carry their state/speed/context and the idle
-  ones stay on the card. Waiting requests are not lanes; the Queue card owns them.
-- **Context ring** — the fullest in-flight request's prompt + generated against the model's
-  `model_context_length` (1 M here); when nothing runs it reads the newest finished request.
-- **Requests** — the proxy's `/admin/api/recent` journal, read from the server's own
-  `Chat completion:` log line: finish reason, prompt/output tokens, duration, speed, TTFT and
-  context used/window, newest first, followed by whatever is in flight.
-- **Session** — from `stats`: uptime, totals, lifetime averages. The conversation-cache card is hidden.
-- **Chat, Config and the server log are hidden** — the keyless stats address serves stats only.
-- **Cost** — 891 bytes per activity poll, 6 KB of stats every 30th tick and the recent journal
-  (about 6 KB) every 5th tick: still about 130 MB/day at a 1 s cadence, against ~1.1 GB/day for a
-  Strata `/metrics` at the same rate. Measured on an M5 Ultra: polling at 5 Hz left decode
-  throughput unchanged (107.8 vs 119.9 tok/s, run-to-run variance only).
-- **Proxy and dashboard** — both live in `tools/omlx-stats/`: the keyless service and the page it
-  serves at `/`; see that folder's README for deployment.
+| Endpoint | When | Feeds |
+|---|---|---|
+| `/admin/api/activity` | every poll | live speeds, active models, per-request rows, queue, memory |
+| `/admin/api/stats?scope=session` | every 3rd poll | Serving card, cache tiers, engine versions |
+| `/admin/api/stats?scope=alltime&model=…` | every 3rd poll, only when picked | Serving card's All time / one-model view |
+| `/admin/api/logs?lines=N` | when a request finishes, else once a minute | finished requests and Trends (parsed from oMLX's own `Chat completion:` line), Logs screen |
+| `/admin/api/models` | once a minute | each model's context window |
+| `/admin/api/global-settings` | once a minute | lane count (`scheduler.max_concurrent_requests`) |
+| `/admin/api/usage?range=…` | once a minute | Usage card |
+
+The Monitor on an oMLX server follows the blocks of oMLX's own Status page:
+
+- **Live**: decode and prefill tok/s summed across running requests, with a decode trace, and
+  how many requests run, wait, and fit side by side.
+- **Active models**: each loaded model with its resident size, pinned badge, context window and
+  state ("2 req", "Idle · 4 min · ~26 min left", "Loading · 12 s, ~30 s left"), then one row per
+  request: prompts being read (progress bar, speed, ETA, cached tokens), answers being written
+  (speed, tokens, context fill, a warning when a request stalls), and the queue.
+- **Memory**: the process memory enforcer's figure against its hard ceiling, with the soft and
+  hard limits and the pressure level.
+- **Serving**: Session / All time, for every model or one (the menu on the card); requests,
+  prompt, cached and generated tokens, cache efficiency, average prefill and decode speeds.
+- **Usage**: tokens per hour today, or per day over 7 or 30 days, from oMLX's own history,
+  with totals and the busiest models.
+- **Cache**: memory and SSD tiers (used / ceiling, blocks, files), prefix and memory hit rates,
+  evictions.
+- **Recent requests** and **Trends**: finish reason, prompt/output tokens, duration, speed, TTFT
+  and context used, newest first.
+- **Engine**: the mlx, mlx-lm, mlx-vlm… versions it runs on.
+- **Chat** works as on the other engines (the loaded model is the one asked for), and **Server
+  log** tails `server.log` with the same level filter and search as Basalt's.
+
+oMLX reports no GPU load, temperature, power or PCIe counters, so those tiles are not shown.
+Theme: graphite chrome with a cool silver accent, and an "oMLX server" badge on every title.
+
+**Server side:** oMLX binds `127.0.0.1` by default. For the phone to reach it, set the server's
+host to `0.0.0.0` (or the Mac's LAN address) in oMLX's settings, or reach it over Tailscale.
 
 ## Build
 
@@ -197,9 +209,8 @@ Open **Settings** (the app starts there until a key is saved), enter the server 
 connection**, then **Save**. The key goes into the Keychain and is sent only as a `Bearer` header
 to that address. The Mac app has the same fields in its Settings window.
 
-For oMLX, enter `http://<host>:8001` (the stats proxy) and leave the key empty: the proxy holds
-it server-side. Pointing at oMLX's own `:8000` with the key also works for stats; the app never
-models the `api_key` field that body carries, so it is dropped at decode.
+For oMLX, enter `http://<host>:8000` and oMLX's main API key. The stats body also carries that
+key; the app never models the field, so it is dropped at decode.
 
 The iOS app polls while it is in the foreground and stops in the background; the Mac app polls
 continuously at the rate you choose.

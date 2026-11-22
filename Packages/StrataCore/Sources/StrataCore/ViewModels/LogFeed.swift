@@ -1,8 +1,10 @@
 import Foundation
 import Observation
 
-/// Basalt's server log, as its web page tails it: `GET /api/logs?after=N` every couple of
-/// seconds while the Logs screen is open, the newest lines kept, filtered by level and text.
+/// The server log, as the web pages tail it, every couple of seconds while the Logs screen is
+/// open: Basalt's `GET /api/logs?after=N`, or the tail of oMLX's `server.log`
+/// (`GET /admin/api/logs?lines=N`, numbered by line). The newest lines are kept, filtered by level
+/// and text.
 @Observable @MainActor
 public final class LogFeed {
     /// Which lines to show — the web page's All / Warnings / Errors.
@@ -41,6 +43,10 @@ public final class LogFeed {
     public private(set) var hasLoaded = false
     public var filter: Filter = .all
     public var query = ""
+    /// Which engine's log endpoint to read.
+    public var engine: ServerEngine = .basalt
+    /// oMLX sends the tail, not what came after an id: this many lines a fetch is plenty at 2 s.
+    static let omlxTailLines = 300
 
     private var last = 0
     private var task: Task<Void, Never>?
@@ -82,8 +88,11 @@ public final class LogFeed {
     /// One fetch. Public so tests and pull-to-refresh can drive it.
     public func fetch(_ client: StrataClient) async {
         do {
-            let batch = try await client.logs(after: last)
-            apply(batch)
+            if engine == .omlx {
+                apply(OmLXLogParser.batch(try await client.omlxLogs(lines: Self.omlxTailLines)))
+            } else {
+                apply(try await client.logs(after: last))
+            }
             errorText = nil
         } catch StrataError.unauthorized {
             errorText = "This server rejected the API key."
