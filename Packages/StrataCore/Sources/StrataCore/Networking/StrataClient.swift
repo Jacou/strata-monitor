@@ -93,22 +93,42 @@ public struct StrataClient: Sendable {
 
     // MARK: - oMLX
 
-    /// oMLX has no `/metrics`. The stats proxy on `:8001` forwards its live payload instead; it
-    /// needs no API key, so the client sends none.
+    // oMLX has no `/metrics`. Its admin API answers on the same port as `/v1`, behind the main API
+    // key (sent as a Bearer token like every other call); sub-keys are refused there.
+
+    /// The live payload: loaded models, and the requests each is reading, decoding or queueing.
     public func omlxActivity() async throws -> OmLXActivity {
         try await get(path: "admin/api/activity", query: [], as: OmLXActivity.self)
     }
 
-    /// oMLX's lifetime counters (`admin/api/stats`). The proxy strips the server's own `api_key`
-    /// from this body before forwarding it; nothing here models that field.
-    public func omlxStats() async throws -> OmLXStats {
-        try await get(path: "admin/api/stats", query: [], as: OmLXStats.self)
+    /// Serving counters, cache tiers and engine versions. `model` filters to one model (empty for
+    /// all); `scope` picks this process's numbers or the persisted all-time totals.
+    public func omlxStats(scope: OmLXStatsScope = .session, model: String? = nil) async throws -> OmLXStats {
+        var query = [URLQueryItem(name: "scope", value: scope.rawValue)]
+        if let model, !model.isEmpty { query.append(URLQueryItem(name: "model", value: model)) }
+        return try await get(path: "admin/api/stats", query: query, as: OmLXStats.self)
     }
 
-    /// The proxy's journal of finished requests (`admin/api/recent`), read from oMLX's server log.
-    /// It carries each request's tokens, duration, speed, finish reason and context used/window.
-    public func omlxRecent() async throws -> OmLXRecent {
-        try await get(path: "admin/api/recent", query: [], as: OmLXRecent.self)
+    /// The last `lines` lines of `server.log`.
+    public func omlxLogs(lines: Int) async throws -> OmLXLogTail {
+        try await get(path: "admin/api/logs", query: [URLQueryItem(name: "lines", value: String(lines))], as: OmLXLogTail.self)
+    }
+
+    /// Every model the server knows, with its context window. A heavy call: ask rarely.
+    public func omlxModels() async throws -> OmLXModelList {
+        try await get(path: "admin/api/models", query: [], as: OmLXModelList.self)
+    }
+
+    /// The server's settings; the app reads the lane count from it.
+    public func omlxGlobalSettings() async throws -> OmLXGlobalSettings {
+        try await get(path: "admin/api/global-settings", query: [], as: OmLXGlobalSettings.self)
+    }
+
+    /// oMLX's hourly serving history.
+    public func omlxUsage(range: OmLXUsageRange, model: String? = nil) async throws -> OmLXUsage {
+        var query = [URLQueryItem(name: "range", value: range.rawValue)]
+        if let model, !model.isEmpty { query.append(URLQueryItem(name: "model", value: model)) }
+        return try await get(path: "admin/api/usage", query: query, as: OmLXUsage.self)
     }
 
     /// `GET /config`: the run-config keys this server will edit. 404 when it has no run config.

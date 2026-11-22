@@ -86,7 +86,7 @@ public struct ChatView: View {
             if chat.isStreaming {
                 Label("Answering", systemImage: "waveform")
                     .foregroundStyle(theme.accentText)
-            } else if let model = poller.health?.model, !model.isEmpty {
+            } else if let model = poller.chatModel, !model.isEmpty {
                 Text(model)
                     .foregroundStyle(theme.textTertiary)
             }
@@ -184,7 +184,7 @@ public struct ChatView: View {
     private func send() {
         guard let client = settings.makeClient() else { return }   // the banner above says why
         Task {
-            await chat.send(client: client, model: poller.health?.model)
+            await chat.send(client: client, model: poller.chatModel)
         }
     }
 }

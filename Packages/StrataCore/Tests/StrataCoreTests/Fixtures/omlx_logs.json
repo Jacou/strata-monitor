@@ -1,0 +1,8 @@
+{
+  "logs": "2026-11-21 21:29:58,010 - omlx.scheduler - INFO - Prefill done: 97480 tokens\n2026-11-21 21:30:01,123 - omlx.server - INFO - Chat completion: model=DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp, 601 tokens in 9.81s (74.3 tok/s), prompt: 97480, finish_reason=tool_calls, max_tokens=65536, request_max_tokens=65536, stream_model_ttft=1.71s, stream_visible_ttft=1.80s\n2026-11-21 21:30:02,500 - omlx.process_memory_enforcer - WARNING - Memory pressure: soft\nTraceback (most recent call last):\n2026-11-21 21:30:15,004 - omlx.server - INFO - Chat completion: model=DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp, 12 tokens in 0.50s (24.0 tok/s), prompt: 30, finish_reason=stop, max_tokens=4096, request_max_tokens=None\n2026-11-21 21:30:16,000 - omlx.server - ERROR - Request failed\n",
+  "total_lines": 1206,
+  "log_file": "server.log",
+  "available_files": [
+    "server.log"
+  ]
+}

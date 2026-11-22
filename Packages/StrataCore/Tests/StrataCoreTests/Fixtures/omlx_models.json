@@ -1,0 +1,28 @@
+{
+  "models": [
+    {
+      "id": "DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp",
+      "display_name": "DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp",
+      "loaded": true,
+      "is_loading": false,
+      "pinned": true,
+      "is_default": true,
+      "model_type": "llm",
+      "engine_type": "batched",
+      "model_context_length": 1048576,
+      "estimated_size": 40000000000
+    },
+    {
+      "id": "GLM-5.3-Flash-oQ4e-mtp",
+      "loaded": false,
+      "model_type": "llm",
+      "model_context_length": 202752
+    },
+    {
+      "id": "embed-small",
+      "loaded": false,
+      "model_type": "embedding",
+      "model_context_length": null
+    }
+  ]
+}

@@ -30,8 +30,8 @@ public final class ConnectionTester {
         state = .testing
         do {
             let health = try await client.health()
-            // oMLX has no `/metrics`: its live payload is `admin/api/activity`, and its resident
-            // model is in `active_models.models`, not in a `metrics.engine`.
+            // oMLX has no `/metrics`: its live payload is `admin/api/activity` (main API key
+            // required), and its resident model is in `active_models.models`.
             if health.engine == .omlx {
                 let activity = try await client.omlxActivity()
                 state = .ok(model: activity.activeModels?.models?.first?.id ?? health.model)

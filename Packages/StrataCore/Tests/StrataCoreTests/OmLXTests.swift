@@ -41,8 +41,8 @@ final class OmLXTests: XCTestCase {
 
     func testEngineCapabilities() {
         XCTAssertFalse(ServerEngine.omlx.hasRunConfig)
-        XCTAssertFalse(ServerEngine.omlx.hasLogs, "its log endpoint is not on the stats proxy")
-        XCTAssertFalse(ServerEngine.omlx.hasChat, "chat lives on the keyed port")
+        XCTAssertTrue(ServerEngine.omlx.hasLogs, "the app tails /admin/api/logs directly")
+        XCTAssertTrue(ServerEngine.omlx.hasChat, "chat is on the same port and key as the admin API")
         XCTAssertFalse(ServerEngine.omlx.hasHardware, "no GPU, thermal, power, PCIe or CPU counters")
         XCTAssertTrue(ServerEngine.strata.hasChat)
         XCTAssertTrue(ServerEngine.strata.hasHardware)
@@ -352,34 +352,33 @@ final class OmLXTests: XCTestCase {
 
     // MARK: - the poll
 
-    func testPollerAsksTheProxyForActivityNotMetrics() async throws {
-        let healthBody = try String(contentsOf: Fixtures.url("omlx_health", testClass: Self.self), encoding: .utf8)
-        let activityBody = try String(contentsOf: Fixtures.url("omlx_activity_generating", testClass: Self.self), encoding: .utf8)
-        let statsBody = try String(contentsOf: Fixtures.url("omlx_stats", testClass: Self.self), encoding: .utf8)
-        let recentBody = try String(contentsOf: Fixtures.url("omlx_recent", testClass: Self.self), encoding: .utf8)
+    func testPollerReadsOMLXDirectlyWithTheKey() async throws {
+        func body(_ name: String) throws -> String {
+            try String(contentsOf: Fixtures.url(name, testClass: Self.self), encoding: .utf8)
+        }
+        let bodies: [String: String] = [
+            "health": try body("omlx_health"),
+            "activity": try body("omlx_activity_generating"),
+            "stats": try body("omlx_stats"),
+            "logs": try body("omlx_logs"),
+            "models": try body("omlx_models"),
+            "global-settings": try body("omlx_global_settings"),
+            "usage": try body("omlx_usage_today"),
+        ]
 
         let transport = StubTransport { request in
             let path = request.url?.path ?? ""
-            let body: String
-            if path.hasSuffix("health") {
-                body = healthBody
-            } else if path.hasSuffix("activity") {
-                body = activityBody
-            } else if path.hasSuffix("stats") {
-                body = statsBody
-            } else if path.hasSuffix("recent") {
-                body = recentBody
-            } else {
+            guard let key = bodies.keys.first(where: { path.hasSuffix("/" + $0) }), let text = bodies[key] else {
                 return (Data(#"{"error":"not found"}"#.utf8), httpResponse(request.url!, 404))
             }
-            return (Data(body.utf8), httpResponse(request.url!, 200))
+            return (Data(text.utf8), httpResponse(request.url!, 200))
         }
-        let client = StrataClient(baseURL: URL(string: "http://192.168.1.26:8001")!, transport: transport)
+        let client = StrataClient(baseURL: URL(string: "http://192.168.1.26:8000")!, apiKey: "main-key", transport: transport)
         let poller = MetricsPoller(client: client, interval: 0.05)
         poller.start()
 
         let deadline = Date().addingTimeInterval(5)
-        while Date() < deadline, poller.metrics == nil {
+        while Date() < deadline, poller.metrics == nil || poller.omlxJournal.isEmpty {
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
         poller.stop()
@@ -387,19 +386,41 @@ final class OmLXTests: XCTestCase {
         XCTAssertEqual(poller.engine, .omlx)
         XCTAssertGreaterThan(poller.metrics?.live?.tokS ?? 0, 0)
         XCTAssertEqual(poller.status, .generating(tokS: poller.metrics?.live?.tokS))
-        XCTAssertEqual(poller.slots.count, 4, "the proxy reports the engine's 4 lanes")
+        XCTAssertEqual(poller.omlxSlots, 4, "from scheduler.max_concurrent_requests")
+        XCTAssertEqual(poller.slots.count, 4)
+        XCTAssertEqual(poller.omlxJournal.count, 2, "both Chat completion lines in the log tail")
+        XCTAssertEqual(poller.omlxJournal.first?.outputTokens, 12, "newest first")
+        XCTAssertEqual(poller.trendRequests.count, 2, "the trends card draws the journal")
+        XCTAssertNotNil(poller.omlxUsage)
+        XCTAssertNotNil(poller.omlxStats?.runtimeCache)
+        XCTAssertEqual(poller.omlxScopedStats, poller.omlxStats, "session-wide is the same fetch")
+        XCTAssertEqual(poller.chatModel, "DeepSeek-V4.1-Flash-1017-oQ2.5e-ngram-mtp", "the loaded model, not the default")
+
         let paths = transport.requests.compactMap { $0.url?.path }
-        XCTAssertTrue(paths.contains("/admin/api/activity"))
-        XCTAssertTrue(paths.contains("/admin/api/stats"))
-        XCTAssertTrue(paths.contains("/admin/api/recent"))
+        for path in ["activity", "stats", "logs", "models", "global-settings", "usage"] {
+            XCTAssertTrue(paths.contains("/admin/api/" + path), path)
+        }
+        XCTAssertFalse(paths.contains("/admin/api/recent"), "no proxy endpoints")
         XCTAssertFalse(paths.contains("/metrics"), "oMLX has no /metrics")
-        // The proxy needs no key, so no Authorization header is sent.
-        XCTAssertTrue(transport.requests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == nil })
+        let admin = transport.requests.filter { $0.url?.path.hasPrefix("/admin/") == true }
+        XCTAssertTrue(admin.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == "Bearer main-key" })
+    }
+
+    func testPollerWithoutAKeySaysSo() async throws {
+        let healthBody = try String(contentsOf: Fixtures.url("omlx_health", testClass: Self.self), encoding: .utf8)
+        let transport = StubTransport { request in
+            if request.url?.path == "/health" { return (Data(healthBody.utf8), httpResponse(request.url!, 200)) }
+            return (Data(#"{"detail":"Not authenticated"}"#.utf8), httpResponse(request.url!, 401))
+        }
+        let poller = MetricsPoller(client: StrataClient(baseURL: URL(string: "http://192.168.1.26:8000")!, transport: transport))
+        await poller.pollOnce()
+        XCTAssertEqual(poller.engine, .omlx, "/health needs no key, so the engine is still known")
+        XCTAssertEqual(poller.status, .unauthorized)
     }
 
     func testPollerTracksTheRememberedEngine() async throws {
         // An address last seen as oMLX opens as oMLX before /health answers.
-        let base = URL(string: "http://192.168.1.26:8001")!
+        let base = URL(string: "http://192.168.1.26:8000")!
         UserDefaults.standard.set("omlx", forKey: "poller.engine.\(base.absoluteString)")
         defer { UserDefaults.standard.removeObject(forKey: "poller.engine.\(base.absoluteString)") }
         XCTAssertEqual(MetricsPoller.rememberedEngine(for: base), .omlx)

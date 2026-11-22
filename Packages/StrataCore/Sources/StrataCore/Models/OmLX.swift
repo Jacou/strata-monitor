@@ -3,7 +3,7 @@ import Foundation
 // MARK: - /admin/api/activity
 
 /// oMLX's live state: one entry per loaded model, with the requests it is reading or decoding.
-/// Read from the stats proxy on `:8001` (`/admin/api/activity`), which needs no key.
+/// `GET /admin/api/activity` on the server itself, with the main API key.
 public struct OmLXActivity: Decodable, Encodable, Sendable, Equatable {
     public var activeModels: OmLXActiveModels?
 
@@ -86,10 +86,13 @@ public struct OmLXModel: Decodable, Encodable, Sendable, Equatable {
     public var actualSize: Double?
     public var pinned: Bool?
     public var isLoading: Bool?
+    public var loadingElapsedSeconds: Double?
     public var loadingRemainingSeconds: Double?
     public var activeRequests: Int?
     public var waitingRequests: Int?
     public var idleSeconds: Double?
+    /// Seconds until the idle timeout unloads it; nil when no timeout applies.
+    public var ttlRemainingSeconds: Double?
     public var waiting: [OmLXWaiting]?
     public var prefilling: [OmLXPrefill]?
     public var generating: [OmLXGenerate]?
@@ -103,10 +106,12 @@ public struct OmLXModel: Decodable, Encodable, Sendable, Equatable {
         actualSize = c.decodeDouble(forKey: .actualSize)
         pinned = c.decodeBool(forKey: .pinned)
         isLoading = c.decodeBool(forKey: .isLoading)
+        loadingElapsedSeconds = c.decodeDouble(forKey: .loadingElapsedSeconds)
         loadingRemainingSeconds = c.decodeDouble(forKey: .loadingRemainingSeconds)
         activeRequests = c.decodeInt(forKey: .activeRequests)
         waitingRequests = c.decodeInt(forKey: .waitingRequests)
         idleSeconds = c.decodeDouble(forKey: .idleSeconds)
+        ttlRemainingSeconds = c.decodeDouble(forKey: .ttlRemainingSeconds)
         waiting = c.decodeArray(OmLXWaiting.self, forKey: .waiting)
         prefilling = c.decodeArray(OmLXPrefill.self, forKey: .prefilling)
         generating = c.decodeArray(OmLXGenerate.self, forKey: .generating)
@@ -117,10 +122,12 @@ public struct OmLXModel: Decodable, Encodable, Sendable, Equatable {
         case estimatedSize = "estimated_size"
         case actualSize = "actual_size"
         case isLoading = "is_loading"
+        case loadingElapsedSeconds = "loading_elapsed_seconds"
         case loadingRemainingSeconds = "loading_remaining_seconds_estimate"
         case activeRequests = "active_requests"
         case waitingRequests = "waiting_requests"
         case idleSeconds = "idle_seconds"
+        case ttlRemainingSeconds = "ttl_remaining_seconds"
     }
 }
 
@@ -227,7 +234,9 @@ public struct OmLXWaiting: Decodable, Encodable, Sendable, Equatable {
 
 // MARK: - /admin/api/stats
 
-/// Lifetime counters since the oMLX process started; they reset on restart.
+/// Serving counters: since the oMLX process started (`scope=session`), or the totals it keeps
+/// across restarts (`scope=alltime`). The body also carries the server's own `api_key`; nothing
+/// here models that field, so it is never kept.
 public struct OmLXStats: Decodable, Encodable, Sendable, Equatable {
     public var totalTokensServed: Double?
     /// Prompt tokens served from the prefix cache.
@@ -243,6 +252,8 @@ public struct OmLXStats: Decodable, Encodable, Sendable, Equatable {
     public var uptimeSeconds: Double?
     public var engines: [String: OmLXEngineVersion]?
     public var activeModels: OmLXActiveModels?
+    /// Memory and SSD cache tiers; session scope only.
+    public var runtimeCache: OmLXRuntimeCache?
 
     public init() {}
 
@@ -259,6 +270,7 @@ public struct OmLXStats: Decodable, Encodable, Sendable, Equatable {
         uptimeSeconds = c.decodeDouble(forKey: .uptimeSeconds)
         engines = try? c.decode([String: OmLXEngineVersion].self, forKey: .engines)
         activeModels = try? c.decode(OmLXActiveModels.self, forKey: .activeModels)
+        runtimeCache = try? c.decode(OmLXRuntimeCache.self, forKey: .runtimeCache)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -273,6 +285,7 @@ public struct OmLXStats: Decodable, Encodable, Sendable, Equatable {
         case avgGenerationTps = "avg_generation_tps"
         case uptimeSeconds = "uptime_seconds"
         case activeModels = "active_models"
+        case runtimeCache = "runtime_cache"
     }
 }
 
@@ -296,9 +309,9 @@ public struct OmLXEngineVersion: Decodable, Encodable, Sendable, Equatable {
     private enum CodingKeys: String, CodingKey { case name, version, commit, url }
 }
 
-// MARK: - /admin/api/recent
+// MARK: - finished requests
 
-/// One finished request, recorded by the stats proxy from oMLX's own log line. `finish` is the
+/// One finished request, read from oMLX's own `Chat completion:` log line (`OmLXLogParser`). `finish` is the
 /// server's OpenAI-style reason ("tool_calls", "stop", …); `contextUsed` is prompt plus output.
 public struct OmLXFinishedRequest: Decodable, Encodable, Sendable, Equatable {
     public var finishedAt: Double?
@@ -344,7 +357,9 @@ public struct OmLXFinishedRequest: Decodable, Encodable, Sendable, Equatable {
     }
 }
 
-/// The proxy's journal of finished requests, newest first, plus each model's context window.
+/// The app's journal of finished requests, newest first, plus each model's context window and the
+/// engine's lane count. Assembled by the poller from `/admin/api/logs`, `/admin/api/models` and
+/// `/admin/api/global-settings`; it stays Codable so a fixture can stand in for it in tests.
 public struct OmLXRecent: Decodable, Encodable, Sendable, Equatable {
     public var requests: [OmLXFinishedRequest]?
     public var windows: [String: Double]?
@@ -354,10 +369,17 @@ public struct OmLXRecent: Decodable, Encodable, Sendable, Equatable {
 
     public init() {}
 
+    public init(requests: [OmLXFinishedRequest]?, windows: [String: Double]?, slots: Int?, generatedAt: Double? = nil) {
+        self.requests = requests
+        self.windows = windows
+        self.slots = slots
+        self.generatedAt = generatedAt
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         requests = c.decodeArray(OmLXFinishedRequest.self, forKey: .requests)
-        // The proxy sends windows as JSON numbers; they may arrive as integers.
+        // Windows are JSON numbers; they may arrive as integers.
         if let doubles = try? c.decode([String: Double].self, forKey: .windows) {
             windows = doubles
         } else if let ints = try? c.decode([String: Int].self, forKey: .windows) {
@@ -376,7 +398,7 @@ public struct OmLXRecent: Decodable, Encodable, Sendable, Equatable {
 // MARK: - adapting to the app's Metrics
 
 /// One tick's worth of oMLX state: the live payload, the lifetime totals when they are due, and
-/// the proxy's finished-request journal.
+/// the finished-request journal read from the server's log.
 /// `metrics()` turns them into the `Metrics` the Monitor's derivation already understands, so no
 /// screen has to know which engine answered.
 public struct OmLXSnapshot: Sendable, Equatable {
@@ -447,8 +469,8 @@ public struct OmLXSnapshot: Sendable, Equatable {
         return engine
     }
 
-    /// The loaded model's context window: from the proxy's model table, or the last request's own
-    /// figure when the table has not arrived yet.
+    /// The loaded model's context window: from the model table, or the last request's own figure
+    /// when the table has not arrived yet.
     private func contextWindow(for model: String?) -> Double? {
         guard let model else { return nil }
         if let window = recent?.windows?[model], window > 0 { return window }
@@ -457,7 +479,7 @@ public struct OmLXSnapshot: Sendable, Equatable {
 
     private func live() -> Live {
         var live = Live()
-        // The proxy reports the engine's lane count; without it, the in-flight requests stand in.
+        // The engine's lane count from its settings; without it, the in-flight requests stand in.
         let capacity = recent?.slots ?? activeCount
         live.slots = LiveSlots(total: capacity, active: activeCount, queueDepth: waitingCount)
         // A queue is only the pill's headline while nothing is running: with work in flight the
@@ -496,24 +518,10 @@ public struct OmLXSnapshot: Sendable, Equatable {
         return live
     }
 
-    /// Requests as rows: the proxy's finished journal newest first, then whatever is running now.
+    /// Requests as rows: the finished journal newest first, then whatever is running now.
     /// oMLX keeps no history of its own; the journal comes from the server's own log line.
     private func requests() -> [Request] {
-        var rows: [Request] = []
-        for item in recent?.requests ?? [] {
-            var row = Request(id: "recent-\(Int(item.finishedAt ?? 0))-\(item.model ?? "")")
-            row.time = item.finishedAt
-            row.durationS = item.durationS
-            row.finish = RequestFinish(rawValue: item.finish ?? "")
-            row.promptTokens = item.promptTokens
-            row.outputTokens = item.outputTokens
-            row.decodeTokS = item.tokS
-            row.decodeMs = item.durationS.map { $0 * 1000 }
-            row.promptMs = item.ttftS.map { $0 * 1000 }
-            row.contextUsed = item.contextUsed
-            row.maxContext = item.contextWindow
-            rows.append(row)
-        }
+        var rows = finishedRows()
         for item in generating {
             var row = Request(id: item.requestID ?? UUID().uuidString)
             row.promptTokens = item.promptTokens
@@ -536,6 +544,27 @@ public struct OmLXSnapshot: Sendable, Equatable {
             rows.append(row)
         }
         return rows
+    }
+
+    /// The finished journal as request rows, newest first. The Trends card draws from these too:
+    /// oMLX keeps no per-request history an app could ask for.
+    public func finishedRows() -> [Request] {
+        (recent?.requests ?? []).map { item in
+            // The log stamps milliseconds, so two requests finishing in the same second stay apart
+            // and a row keeps its id as newer ones arrive above it.
+            var row = Request(id: "recent-\(Int(((item.finishedAt ?? 0) * 1000).rounded()))-\(item.model ?? "")")
+            row.time = item.finishedAt
+            row.durationS = item.durationS
+            row.finish = RequestFinish(rawValue: item.finish ?? "")
+            row.promptTokens = item.promptTokens
+            row.outputTokens = item.outputTokens
+            row.decodeTokS = item.tokS
+            row.decodeMs = item.durationS.map { $0 * 1000 }
+            row.promptMs = item.ttftS.map { $0 * 1000 }
+            row.contextUsed = item.contextUsed
+            row.maxContext = item.contextWindow
+            return row
+        }
     }
 
     private func totals(now: Date) -> Totals? {
@@ -569,7 +598,7 @@ public struct OmLXSnapshot: Sendable, Equatable {
     }
 
     /// One row per concurrent lane, in the shape Basalt's `/slots` gives. oMLX runs up to
-    /// `scheduler.max_concurrent_requests` requests side by side (the proxy reports it): busy rows
+    /// `scheduler.max_concurrent_requests` requests side by side (from its settings): busy rows
     /// are the decoding/prefilling requests, and the rest stay on the card as idle slots. Waiting
     /// requests are not lanes — the Queue card owns those.
     public func slots() -> [Slot] {

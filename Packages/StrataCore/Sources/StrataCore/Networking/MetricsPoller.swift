@@ -71,13 +71,43 @@ public final class MetricsPoller {
     /// Basalt with more than one slot: `GET /slots` from the same tick, empty otherwise.
     public private(set) var slots: [Slot] = []
     public private(set) var trendsUpdated: Date?
-    /// oMLX's lifetime totals, fetched every 30th poll (the guide's 30–60 s) rather than each tick.
-    private var omlxStats: OmLXStats?
-    private let statsEveryPolls = 30
-    /// The proxy's finished-request journal: every 5th poll, so the Recent requests card stays
-    /// fresh without pulling 6 KB on every tick.
-    private var omlxRecent: OmLXRecent?
-    private let recentEveryPolls = 5
+    // MARK: oMLX state
+    //
+    // oMLX is read straight from its admin API with the main key. The live payload comes every
+    // tick; everything else is slower to change and some of it costs the server more, so each has
+    // its own cadence, counted in polls.
+
+    /// `/admin/api/activity`, every poll.
+    public private(set) var omlxActivity: OmLXActivity?
+    /// Session counters for all models: cache tiers, engine versions, the Session card.
+    public private(set) var omlxStats: OmLXStats?
+    /// The counters the Serving card shows: the picked scope and model filter. The same as
+    /// `omlxStats` when that is session-wide.
+    public private(set) var omlxScopedStats: OmLXStats?
+    public private(set) var omlxScope: OmLXStatsScope = .session
+    /// nil or empty: every model.
+    public private(set) var omlxModelFilter: String?
+    public private(set) var omlxUsage: OmLXUsage?
+    public private(set) var omlxUsageRange: OmLXUsageRange = .today
+    public private(set) var omlxModelList: OmLXModelList?
+    /// Finished requests read from the server log, newest first.
+    public private(set) var omlxJournal: [OmLXFinishedRequest] = []
+    /// `scheduler.max_concurrent_requests`: how many requests the engine runs side by side.
+    public private(set) var omlxSlots: Int?
+    /// The requests in flight last tick: one that is gone has finished, so its log line is due.
+    private var omlxInFlight: Set<String> = []
+    /// Log reads still owed after a request finished (this tick and the next, in case the line
+    /// lands a moment after the activity entry goes).
+    private var omlxLogsDue = 0
+    private var omlxLogsSeeded = false
+    private var omlxPrimed = false
+
+    private let statsEveryPolls = 3
+    private let slowEveryPolls = 60
+    private let logsEveryPolls = 60
+    nonisolated static let journalLimit = 50
+    nonisolated static let logSeedLines = 1500
+    nonisolated static let logTailLines = 400
 
     /// False while `scenePhase != .active` (iOS) or the Mac is asleep / locked: the loop is stopped.
     public private(set) var isActive = true
@@ -193,8 +223,7 @@ public final class MetricsPoller {
         status = .unknown
         health = nil
         slots = []
-        omlxStats = nil
-        omlxRecent = nil
+        resetOmLX()
         sampled = SampledHistory()
         polls = 0
         resume()
@@ -217,6 +246,79 @@ public final class MetricsPoller {
         guard all != allRequests else { return }
         allRequests = all
         if all, isActive { Task { await refreshTrends() } }
+    }
+
+    // MARK: - oMLX controls
+
+    /// The Serving card's Session / All time switch: fetched at once, then on the usual cadence.
+    public func setOmLXScope(_ scope: OmLXStatsScope) {
+        guard scope != omlxScope else { return }
+        omlxScope = scope
+        omlxScopedStats = nil
+        if isActive { Task { await refreshOmLXScopedStats() } }
+    }
+
+    /// The model filter on the Serving and Usage cards; nil for every model.
+    public func setOmLXModelFilter(_ model: String?) {
+        let picked = model?.isEmpty == true ? nil : model
+        guard picked != omlxModelFilter else { return }
+        omlxModelFilter = picked
+        omlxScopedStats = nil
+        if isActive {
+            Task {
+                await refreshOmLXScopedStats()
+                await refreshOmLXUsage()
+            }
+        }
+    }
+
+    public func setOmLXUsageRange(_ range: OmLXUsageRange) {
+        guard range != omlxUsageRange else { return }
+        omlxUsageRange = range
+        omlxUsage = nil
+        if isActive { Task { await refreshOmLXUsage() } }
+    }
+
+    /// What the oMLX screen draws from: live state, session totals and the finished journal.
+    public var omlxSnapshot: OmLXSnapshot? {
+        guard let omlxActivity else { return nil }
+        return OmLXSnapshot(activity: omlxActivity, stats: omlxStats, recent: omlxRecent)
+    }
+
+    /// The journal in the shape the Metrics adapter reads, each request given its model's window.
+    private var omlxRecent: OmLXRecent {
+        let windows = omlxModelList?.windows ?? [:]
+        let requests = omlxJournal.map { item -> OmLXFinishedRequest in
+            var item = item
+            if item.contextWindow == nil, let model = item.model { item.contextWindow = windows[model] }
+            return item
+        }
+        return OmLXRecent(requests: requests, windows: windows, slots: omlxSlots)
+    }
+
+    /// The model a chat request names. oMLX loads whatever is asked for, so the one already in
+    /// memory is the better pick than the server's default.
+    public var chatModel: String? {
+        if engine == .omlx, let loaded = omlxActivity?.activeModels?.models?.first(where: { $0.isLoading != true })?.id {
+            return loaded
+        }
+        return health?.model
+    }
+
+    private func resetOmLX() {
+        omlxActivity = nil
+        omlxStats = nil
+        omlxScopedStats = nil
+        omlxUsage = nil
+        omlxModelList = nil
+        omlxJournal = []
+        omlxSlots = nil
+        omlxInFlight = []
+        omlxLogsDue = 0
+        omlxLogsSeeded = false
+        omlxPrimed = false
+        // Another server need not have the model that was picked.
+        omlxModelFilter = nil
     }
 
     // MARK: - one poll
@@ -259,17 +361,43 @@ public final class MetricsPoller {
         }
     }
 
-    /// One oMLX tick: the live payload every time, the lifetime totals when they are due.
+    /// One oMLX tick: the live payload every time, the rest when it is due. Only the live payload
+    /// failing fails the tick; a slower call that fails keeps what it had.
     private func pollOmLX() async {
         do {
             let activity = try await client.omlxActivity()
-            if omlxStats == nil || polls % statsEveryPolls == 0 {
+            omlxActivity = activity
+            noteFinishedRequests(in: activity)
+
+            // The first tick fetches everything once; after that a call that keeps failing (usage
+            // history switched off, say) waits for its own cadence instead of retrying every second.
+            let firstTick = !omlxPrimed
+            omlxPrimed = true
+            if firstTick || polls % statsEveryPolls == 0 {
+                let before = omlxStats?.totalRequests
                 omlxStats = (try? await client.omlxStats()) ?? omlxStats
+                // A request too quick to show up in the live payload still bumps the counter.
+                if let before, let after = omlxStats?.totalRequests, after > before { omlxLogsDue = max(omlxLogsDue, 1) }
+                await refreshOmLXScopedStats()
             }
-            if omlxRecent == nil || polls % recentEveryPolls == 0 {
-                omlxRecent = (try? await client.omlxRecent()) ?? omlxRecent
+            if firstTick || polls % slowEveryPolls == 0 {
+                omlxModelList = (try? await client.omlxModels()) ?? omlxModelList
+                omlxSlots = (try? await client.omlxGlobalSettings())?.maxConcurrentRequests ?? omlxSlots
             }
+            if firstTick || polls % slowEveryPolls == 0 {
+                await refreshOmLXUsage()
+            }
+            if firstTick || omlxLogsDue > 0 || polls % logsEveryPolls == 0 {
+                await refreshOmLXJournal()
+            }
+
             let snapshot = OmLXSnapshot(activity: activity, stats: omlxStats, recent: omlxRecent)
+            // The Trends card draws the finished journal: oMLX has no per-request history call.
+            let finished = snapshot.finishedRows()
+            if finished != trendRequests {
+                trendRequests = finished
+                trendsUpdated = .now
+            }
             var fetched = snapshot.metrics()
             sampled.record(fetched.hardware, fetched.live)
             fetched.history = sampled.filling(fetched.history)
@@ -287,6 +415,59 @@ public final class MetricsPoller {
         } catch {
             record(StrataError.unreachable)
         }
+    }
+
+    /// A request that was in flight last tick and is gone now has finished: its `Chat completion:`
+    /// line is in the log, so the journal is read this tick and the next.
+    private func noteFinishedRequests(in activity: OmLXActivity) {
+        let models = activity.activeModels?.models ?? []
+        var current = Set<String>()
+        for model in models {
+            for item in model.generating ?? [] { if let id = item.requestID { current.insert(id) } }
+            for item in model.prefilling ?? [] { if let id = item.requestID { current.insert(id) } }
+        }
+        if !omlxInFlight.subtracting(current).isEmpty { omlxLogsDue = 2 }
+        omlxInFlight = current
+    }
+
+    private func refreshOmLXScopedStats() async {
+        let model = omlxModelFilter
+        if omlxScope == .session, model == nil {
+            omlxScopedStats = omlxStats
+            return
+        }
+        omlxScopedStats = (try? await client.omlxStats(scope: omlxScope, model: model)) ?? omlxScopedStats
+    }
+
+    private func refreshOmLXUsage() async {
+        omlxUsage = (try? await client.omlxUsage(range: omlxUsageRange, model: omlxModelFilter)) ?? omlxUsage
+    }
+
+    /// Reads the tail of `server.log` and keeps the finished requests it has not seen. The first
+    /// read goes further back so the list is not empty on launch.
+    private func refreshOmLXJournal() async {
+        if omlxLogsDue > 0 { omlxLogsDue -= 1 }
+        let lines = omlxLogsSeeded ? Self.logTailLines : Self.logSeedLines
+        guard let tail = try? await client.omlxLogs(lines: lines) else { return }
+        omlxLogsSeeded = true
+        let found = OmLXLogParser.finishedRequests(in: tail.numberedLines.map { $0.text })
+        omlxJournal = Self.merge(journal: omlxJournal, with: found)
+    }
+
+    /// New finished requests joined onto the ones already held: no duplicates, newest first, capped.
+    nonisolated static func merge(journal: [OmLXFinishedRequest], with found: [OmLXFinishedRequest]) -> [OmLXFinishedRequest] {
+        func key(_ item: OmLXFinishedRequest) -> String {
+            "\(item.finishedAt ?? 0)|\(item.model ?? "")|\(item.outputTokens ?? 0)|\(item.promptTokens ?? 0)"
+        }
+        var seen = Set(journal.map(key))
+        var out = journal
+        for item in found where !seen.contains(key(item)) {
+            seen.insert(key(item))
+            out.append(item)
+        }
+        out.sort { ($0.finishedAt ?? 0) > ($1.finishedAt ?? 0) }
+        if out.count > journalLimit { out.removeLast(out.count - journalLimit) }
+        return out
     }
 
     /// A failed /health must not spoil the Monitor: keep the last answer and carry on.

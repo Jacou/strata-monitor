@@ -48,97 +48,113 @@ public struct MonitorView: View {
 
                             header
 
-                            LiveStateCard(card: model.live)
-
-                            // Basalt runs requests side by side: what waits, then each slot.
-                            if let queue = model.queue {
-                                QueueCardView(card: queue)
-                            }
-                            if let slots = model.slots {
-                                SlotsCardView(card: slots)
-                                    .id("slots")
-                            }
-
-                            // Tiles stretch to their row's height (see MetricTileView), so neighbours align.
-                            LazyVGrid(columns: layout.gridColumns, spacing: MonitorLayout.gridSpacing) {
-                                ForEach(model.metrics) { metric in
-                                    MetricTileView(metric: metric, sparklineHeight: layout.sparklineHeight,
-                                                   compact: !layout.isRegularWidth)
+                            if poller.engine == .omlx {
+                                // oMLX reports no GPU counters but far more about its models,
+                                // queue and caches: it gets its own cards.
+                                OmLXMonitorSections(
+                                    requestsModel: model,
+                                    layout: layout,
+                                    trends: trends,
+                                    trendsSeries: $trendsSeries,
+                                    highlightedRequestID: highlightedRequestID,
+                                    presentedDetail: $presentedDetail,
+                                    showsLogs: $showsLogs
+                                ) { id in
+                                    select(request: id, in: model, proxy: proxy)
                                 }
-                            }
+                            } else {
+                                LiveStateCard(card: model.live)
 
-                            if layout.isWide, let cache = model.convCache {
-                                // A wide screen has room for both cards; they share the row's height.
-                                HStack(alignment: .top, spacing: 14) {
+                                // Basalt runs requests side by side: what waits, then each slot.
+                                if let queue = model.queue {
+                                    QueueCardView(card: queue)
+                                }
+                                if let slots = model.slots {
+                                    SlotsCardView(card: slots)
+                                        .id("slots")
+                                }
+
+                                // Tiles stretch to their row's height (see MetricTileView), so neighbours align.
+                                LazyVGrid(columns: layout.gridColumns, spacing: MonitorLayout.gridSpacing) {
+                                    ForEach(model.metrics) { metric in
+                                        MetricTileView(metric: metric, sparklineHeight: layout.sparklineHeight,
+                                                       compact: !layout.isRegularWidth)
+                                    }
+                                }
+
+                                if layout.isWide, let cache = model.convCache {
+                                    // A wide screen has room for both cards; they share the row's height.
+                                    HStack(alignment: .top, spacing: 14) {
+                                        ResourcesCard(
+                                            context: model.context,
+                                            experts: model.experts,
+                                            ram: model.ram,
+                                            temp: model.temp,
+                                            showsEngineBars: model.showsEngineBars,
+                                            fillsHeight: true
+                                        )
+
+                                        ConversationCacheCard(cache: cache, fillsHeight: true)
+                                    }
+                                    .id("resources")
+                                } else {
                                     ResourcesCard(
                                         context: model.context,
                                         experts: model.experts,
                                         ram: model.ram,
                                         temp: model.temp,
-                                        showsEngineBars: model.showsEngineBars,
-                                        fillsHeight: true
+                                        showsEngineBars: model.showsEngineBars
                                     )
+                                    .id("resources")
 
-                                    ConversationCacheCard(cache: cache, fillsHeight: true)
+                                    if let cache = model.convCache {
+                                        ConversationCacheCard(cache: cache)
+                                            .id("cache")
+                                    }
                                 }
-                                .id("resources")
-                            } else {
-                                ResourcesCard(
-                                    context: model.context,
-                                    experts: model.experts,
-                                    ram: model.ram,
-                                    temp: model.temp,
-                                    showsEngineBars: model.showsEngineBars
-                                )
-                                .id("resources")
 
-                                if let cache = model.convCache {
-                                    ConversationCacheCard(cache: cache)
-                                        .id("cache")
+                                // Basalt's split of the last request's expert lookups. Strata's PCIe share
+                                // means something else, so the card is Basalt's alone.
+                                if poller.engine == .basalt, let sources = model.expertSources {
+                                    ExpertSourcesCardView(sources: sources)
+                                        .id("experts")
                                 }
-                            }
 
-                            // Basalt's split of the last request's expert lookups. Strata's PCIe share
-                            // means something else, so the card is Basalt's alone.
-                            if poller.engine == .basalt, let sources = model.expertSources {
-                                ExpertSourcesCardView(sources: sources)
-                                    .id("experts")
-                            }
-
-                            // Trends need at least three requests to be worth a card.
-                            if !trends.isHidden {
-                                TrendsCard(
-                                    trends: trends,
-                                    series: $trendsSeries,
-                                    selectedID: highlightedRequestID
-                                ) { id in
-                                    select(request: id, in: model, proxy: proxy)
+                                // Trends need at least three requests to be worth a card.
+                                if !trends.isHidden {
+                                    TrendsCard(
+                                        trends: trends,
+                                        series: $trendsSeries,
+                                        selectedID: highlightedRequestID
+                                    ) { id in
+                                        select(request: id, in: model, proxy: proxy)
+                                    }
+                                    .id("trends")
                                 }
-                                .id("trends")
-                            }
 
-                            RequestsCard(
-                                rows: model.requests,
-                                emptyText: model.noRequestsText,
-                                showAllLabel: model.showAllLabel,
-                                showingAll: poller.allRequests,
-                                showFewerLabel: model.showFewerLabel,
-                                isTable: layout.isWide,
-                                highlightedID: highlightedRequestID,
-                                presented: $presentedDetail
-                            ) {
-                                poller.setAllRequests(!poller.allRequests)
-                            }
+                                RequestsCard(
+                                    rows: model.requests,
+                                    emptyText: model.noRequestsText,
+                                    showAllLabel: model.showAllLabel,
+                                    showingAll: poller.allRequests,
+                                    showFewerLabel: model.showFewerLabel,
+                                    isTable: layout.isWide,
+                                    highlightedID: highlightedRequestID,
+                                    presented: $presentedDetail
+                                ) {
+                                    poller.setAllRequests(!poller.allRequests)
+                                }
 
-                            if let session = model.session {
-                                SessionCard(session: session)
-                                    .id("session")
-                            }
+                                if let session = model.session {
+                                    SessionCard(session: session)
+                                        .id("session")
+                                }
 
-                            if poller.engine.hasLogs {
-                                Button { showsLogs = true } label: { LogsLinkCard() }
-                                    .buttonStyle(.plain)
-                                    .id("logs")
+                                if poller.engine.hasLogs {
+                                    Button { showsLogs = true } label: { LogsLinkCard() }
+                                        .buttonStyle(.plain)
+                                        .id("logs")
+                                }
                             }
                         }
                         .padding()

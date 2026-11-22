@@ -24,13 +24,12 @@ public enum ServerEngine: String, Sendable, Equatable {
     /// `GET /config` exists — the Config tab is only offered when it does.
     public var hasRunConfig: Bool { self == .strata }
 
-    /// `GET /api/logs` exists.
-    public var hasLogs: Bool { self == .basalt }
+    /// A server log the app can tail: Basalt's `GET /api/logs`, oMLX's `GET /admin/api/logs`.
+    public var hasLogs: Bool { self != .strata }
 
-    /// `POST /v1/chat/completions` is reachable from the address the app polls. oMLX serves it on
-    /// `:8000` behind a key, while the keyless stats proxy on `:8001` forwards stats only, so the
-    /// Chat tab goes for an oMLX server.
-    public var hasChat: Bool { self != .omlx }
+    /// `POST /v1/chat/completions` is reachable from the address the app polls. All three serve it;
+    /// oMLX on the same port as its admin API, behind the same key.
+    public var hasChat: Bool { true }
 
     /// The six hardware tiles need GPU load, VRAM, temperature, power, PCIe and CPU/disk counters.
     /// oMLX reports none of them (its `device-info` has a chip name and core count, at 47 ms a call).

@@ -29,10 +29,11 @@ struct LogsLinkCard: View {
     }
 }
 
-/// Basalt's server log, tailed every two seconds while on screen: newest at the bottom, a level
+/// The server log (Basalt or oMLX), tailed every two seconds while on screen: newest at the bottom, a level
 /// filter and a search like the web page's Logs pane. Follows the end unless you scroll up.
 struct LogsView: View {
     @Environment(AppSettings.self) private var settings
+    @Environment(MetricsPoller.self) private var poller
     @Environment(\.theme) private var theme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -110,9 +111,16 @@ struct LogsView: View {
         }
         .navigationTitle("Server log")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { feed.start { settings.makeClient() } }
+        .onAppear {
+            feed.engine = poller.engine
+            feed.start { settings.makeClient() }
+        }
         .onDisappear { feed.stop() }
         .onChange(of: settings.selectedSlot) { _, _ in feed.reset() }
+        .onChange(of: poller.engine) { _, engine in
+            feed.engine = engine
+            feed.reset()
+        }
     }
 }
 
